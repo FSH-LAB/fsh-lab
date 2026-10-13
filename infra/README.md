@@ -13,7 +13,22 @@ Terraform owns infrastructure; the deploy workflow owns the image, `GIT_SHA`, re
 
 The deployer can write state and lock objects only under `helgefolelse/<env>/`. It cannot write the operator-owned `helgefolelse/github/` prefix or change bucket IAM/settings. Project read roles still allow reading state; this is write isolation, not confidentiality isolation.
 
-To roll out this permission boundary, pause deployments and apply the GCP root with operator credentials in each environment. The plan must add the conditional bucket grant and remove the deployer's project-wide `roles/storage.admin` grant. Verify no other inherited or bucket grants allow that deployer to write outside its prefix before resuming CD. CI cannot apply this IAM change itself.
+To roll out this permission boundary, pause deployments and apply the GCP root with operator credentials in each environment. The plan must add the conditional bucket grant. It removes the deployer's project-wide `roles/storage.admin` grant only if that grant was already tracked in this state; additive IAM resources do not remove unmanaged grants. CI cannot apply this IAM change itself.
+
+After applying, remove any remaining unconditional legacy membership and verify that no project-level `storage.admin` membership remains for the deployer. Run this for each environment, with `PROJECT` set as in the manual GCP commands below:
+
+```sh
+MEMBER="serviceAccount:helgefolelse-deployer@$PROJECT.iam.gserviceaccount.com"
+policy="$(gcloud projects get-iam-policy "$PROJECT" --format=json)"
+if printf '%s' "$policy" | jq -e --arg member "$MEMBER" 'any(.bindings[]; .role == "roles/storage.admin" and (.condition == null) and any(.members[]; . == $member))' >/dev/null; then
+  gcloud projects remove-iam-policy-binding "$PROJECT" \
+    --member="$MEMBER" --role=roles/storage.admin --condition=None
+fi
+gcloud projects get-iam-policy "$PROJECT" --format=json |
+  jq -e --arg member "$MEMBER" '[.bindings[] | select(.role == "roles/storage.admin") | .members[] | select(. == $member)] | length == 0'
+```
+
+The verification must return `true`. If it fails, inspect and remove any conditional legacy grants using their exact conditions. Also review inherited, group-based, and bucket-level permissions for other grants allowing writes outside the environment prefix. Do not resume CD until those checks pass; the project-level check alone cannot establish effective access.
 
 `auto_create_network = false` only affects projects created directly by Terraform. Imported projects retain their creation-time value; changing it can force replacement, so it is ignored. Audit existing default networks and firewall rules separately rather than replacing projects.
 

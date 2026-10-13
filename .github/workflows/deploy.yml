@@ -84,6 +84,11 @@ jobs:
           [[ "$RELEASE" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "::error::Invalid release: $RELEASE"; exit 1; }
           image="ghcr.io/${GITHUB_REPOSITORY,,}-web"
           sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE" --jq .sha)"
+          ancestry="$(gh api "repos/$GITHUB_REPOSITORY/compare/$sha...main" --jq .status)"
+          if [[ "$ancestry" != ahead && "$ancestry" != identical ]]; then
+            echo "::error::Release commit $sha is not an ancestor of current main" >&2
+            exit 1
+          fi
           if [[ -n "$EXPECTED_DIGEST" ]]; then
             [[ "$EXPECTED_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Invalid image digest"; exit 1; }
             digest="$EXPECTED_DIGEST"
