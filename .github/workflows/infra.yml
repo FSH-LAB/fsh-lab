@@ -54,8 +54,8 @@ jobs:
       group: infra-apply-dev
       cancel-in-progress: false
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Check out infrastructure code.
+      id-token: write # Authenticate to GCP using Workload Identity Federation.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -94,8 +94,8 @@ jobs:
       group: infra-apply-production
       cancel-in-progress: false
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Check out infrastructure code.
+      id-token: write # Authenticate to GCP using Workload Identity Federation.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
