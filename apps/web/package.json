@@ -12,20 +12,20 @@
     "test:smoke": "node --test tests/smoke.mjs"
   },
   "dependencies": {
-    "next": "16.3.6",
+    "next": "16.3.8",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@typescript/native": "npm:typescript@^7.0.2",
-    "eslint": "^9.7.0",
-    "eslint-config-next": "16.3.6",
+    "eslint": "^10.12.0",
+    "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.3"
   }
 }
