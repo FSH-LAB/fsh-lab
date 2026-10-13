@@ -2,14 +2,15 @@
 
 pnpm + Turborepo monorepo.
 
-- `apps/web` — Next.js site (source in `src/`). See [apps/web/AGENTS.md](apps/web/AGENTS.md).
-- `packages/*` — shared packages (none yet).
+- `apps/helgefolelse` — Next.js site (source in `src/`). See [apps/helgefolelse/AGENTS.md](apps/helgefolelse/AGENTS.md).
+- `packages/typescript-config` — shared TypeScript configs (`@repo/typescript-config`).
+- `packages/eslint-config` — shared ESLint configs (`@repo/eslint-config`).
 
 Commands (from repo root):
 
 - `pnpm install`
 - `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm typecheck`
-- Single app: `pnpm turbo run build --filter=web`
+- Single app: `pnpm turbo run build --filter=helgefolelse`
 
 Use pnpm only; do not add `package-lock.json` or `yarn.lock`.
 

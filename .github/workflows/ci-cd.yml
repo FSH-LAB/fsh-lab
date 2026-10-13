@@ -98,7 +98,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/web/Dockerfile
+          file: apps/helgefolelse/Dockerfile
           load: true
           tags: helgefolelse-web:ci
           cache-from: type=gha,scope=web
@@ -106,7 +106,7 @@ jobs:
         run: |
           docker run --detach --name web --publish 8080:8080 \
             --env GIT_SHA="$GITHUB_SHA" helgefolelse-web:ci
-          if ! SHA="$GITHUB_SHA" SMOKE_URL=http://localhost:8080 node --test apps/web/tests/smoke.mjs; then
+          if ! SHA="$GITHUB_SHA" SMOKE_URL=http://localhost:8080 node --test apps/helgefolelse/tests/smoke.mjs; then
             docker logs web
             exit 1
           fi
@@ -150,7 +150,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/web/Dockerfile
+          file: apps/helgefolelse/Dockerfile
           push: true
           tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
           labels: |

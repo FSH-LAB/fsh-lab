@@ -33,7 +33,7 @@ The workflows lint command requires actionlint locally (`brew install actionlint
 Run the app's smoke test against a local server with:
 
 ```sh
-SMOKE_URL=http://localhost:8080 SHA="$(git rev-parse HEAD)" pnpm --filter web test:smoke
+SMOKE_URL=http://localhost:8080 SHA="$(git rev-parse HEAD)" pnpm --filter helgefolelse test:smoke
 ```
 
 Start the server or container with the same `GIT_SHA` value. Unit tests do not need a running server.
@@ -44,4 +44,4 @@ Pull requests run app and infrastructure checks without deploying. A push to `ma
 
 Run **Deploy** manually on `main` with an older commit SHA or release tag to redeploy or roll back. Infrastructure ownership and operator commands are in [infra/README.md](infra/README.md).
 
-Use pnpm for workspace dependencies: `pnpm --filter web add <package>`, then commit `pnpm-lock.yaml`.
+Use pnpm for workspace dependencies: `pnpm --filter helgefolelse add <package>`, then commit `pnpm-lock.yaml`.
