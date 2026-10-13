@@ -13,6 +13,16 @@ on:
         required: false
         type: string
         default: ""
+      app:
+        description: Monorepo application name (under apps/)
+        required: false
+        type: string
+        default: helgefolelse
+      service:
+        description: Cloud Run service name
+        required: false
+        type: string
+        default: helgefolelse-web
   workflow_dispatch:
     inputs:
       environment:
@@ -24,6 +34,16 @@ on:
         description: Commit SHA or release tag (for example v2026.10.42) to deploy or roll back to
         required: true
         type: string
+      app:
+        description: Monorepo application name (under apps/)
+        required: false
+        type: string
+        default: helgefolelse
+      service:
+        description: Cloud Run service name
+        required: false
+        type: string
+        default: helgefolelse-web
 
 permissions:
   contents: read
@@ -48,14 +68,15 @@ jobs:
       ENVIRONMENT: ${{ inputs.environment }}
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       REGION: europe-north2
-      SERVICE: helgefolelse-web
+      SERVICE: ${{ inputs.service || 'helgefolelse-web' }}
+      APP: ${{ inputs.app || 'helgefolelse' }}
       CLOUDSDK_CORE_PROJECT: ${{ vars.GCP_PROJECT_ID }}
       CLOUDSDK_RUN_REGION: europe-north2
       CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: apps/helgefolelse/tests
+          sparse-checkout: apps/${{ inputs.app || 'helgefolelse' }}/tests
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -144,7 +165,7 @@ jobs:
         env:
           SMOKE_URL: ${{ steps.candidate.outputs.url }}
           SHA: ${{ steps.release.outputs.sha }}
-        run: node --test apps/helgefolelse/tests/smoke.mjs
+        run: node --test "apps/$APP/tests/smoke.mjs"
 
       - name: Promote candidate
         id: promote

@@ -9,7 +9,7 @@ pnpm + Turborepo monorepo.
 Commands (from repo root):
 
 - `pnpm install`
-- `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm typecheck`
+- `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm typecheck` / `pnpm test` / `pnpm test:e2e`
 - Single app: `pnpm turbo run build --filter=helgefolelse`
 
 Use pnpm only; do not add `package-lock.json` or `yarn.lock`.

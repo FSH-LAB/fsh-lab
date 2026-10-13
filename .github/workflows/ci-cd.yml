@@ -186,6 +186,8 @@ jobs:
       environment: dev
       release: ${{ github.sha }}
       digest: ${{ needs.publish.outputs.digest }}
+      app: helgefolelse
+      service: helgefolelse-web
 
   deploy-production:
     needs: [publish, deploy-dev]
@@ -199,6 +201,8 @@ jobs:
       environment: production
       release: ${{ github.sha }}
       digest: ${{ needs.publish.outputs.digest }}
+      app: helgefolelse
+      service: helgefolelse-web
 
   release:
     name: Create release

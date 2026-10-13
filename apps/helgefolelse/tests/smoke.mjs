@@ -22,12 +22,16 @@ async function request(path) {
   }
 }
 
-test("health reports the deployed commit", { timeout: 90_000 }, async () => {
-  assert.deepEqual(JSON.parse(await request("/api/health")), {
-    status: "ok",
-    commit,
-  });
-});
+test(
+  "health reports the deployed commit and readiness",
+  { timeout: 90_000 },
+  async () => {
+    const data = JSON.parse(await request("/api/health"));
+    assert.equal(data.status, "ok");
+    assert.equal(data.commit, commit);
+    assert.equal(data.ready, true);
+  },
+);
 
 test("home page renders", { timeout: 90_000 }, async () => {
   assert.match(await request("/"), /<title>helgef\u00f8lelse<\/title>/);
