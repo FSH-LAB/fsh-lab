@@ -13,6 +13,17 @@ on:
         required: false
         type: string
         default: ""
+
+      app:
+        description: Monorepo application name (under apps/)
+        required: false
+        type: string
+        default: helgefolelse
+      service:
+        description: Cloud Run service name
+        required: false
+        type: string
+        default: helgefolelse-web
   workflow_dispatch:
     inputs:
       environment:
@@ -24,6 +35,16 @@ on:
         description: Commit SHA or release tag (for example v2026.10.42) to deploy or roll back to
         required: true
         type: string
+      app:
+        description: Monorepo application name (under apps/)
+        required: false
+        type: string
+        default: helgefolelse
+      service:
+        description: Cloud Run service name
+        required: false
+        type: string
+        default: helgefolelse-web
 
 permissions:
   contents: read
@@ -35,7 +56,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       attestations: read # Verify image provenance.
-      contents: read # Check out Terraform and smoke tests.
+      contents: read # Check out smoke tests.
       packages: write # Pull the image and move its environment tag.
       id-token: write # Authenticate to GCP with Workload Identity Federation.
     environment:
@@ -48,17 +69,15 @@ jobs:
       ENVIRONMENT: ${{ inputs.environment }}
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       REGION: europe-north2
-      SERVICE: helgefolelse-web
+      SERVICE: ${{ inputs.service || 'helgefolelse-web' }}
+      APP: ${{ inputs.app || 'helgefolelse' }}
       CLOUDSDK_CORE_PROJECT: ${{ vars.GCP_PROJECT_ID }}
       CLOUDSDK_RUN_REGION: europe-north2
       CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
-      TF_IN_AUTOMATION: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: |
-            infra
-            apps/web/tests
+          sparse-checkout: apps/${{ inputs.app || 'helgefolelse' }}/tests
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -121,15 +140,6 @@ jobs:
           registry: europe-north2-docker.pkg.dev
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
-
-      - name: Apply infrastructure
-        run: |
-          terraform -chdir=infra init -input=false -lockfile=readonly \
-            -backend-config="bucket=$PROJECT_ID-terraform-state" \
-            -backend-config="prefix=helgefolelse/$ENVIRONMENT"
-          terraform -chdir=infra apply -input=false -auto-approve -lock-timeout=5m \
-            -var-file="environments/$ENVIRONMENT.tfvars"
-
       - name: Mirror image to Artifact Registry
         id: mirror
         env:
@@ -159,7 +169,7 @@ jobs:
         env:
           SMOKE_URL: ${{ steps.candidate.outputs.url }}
           SHA: ${{ steps.release.outputs.sha }}
-        run: node --test apps/web/tests/smoke.mjs
+        run: node --test "apps/$APP/tests/smoke.mjs"
 
       - name: Promote candidate
         id: promote

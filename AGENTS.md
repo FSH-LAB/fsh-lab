@@ -1,17 +1,46 @@
-# Agent guide
+# Agent Guide
 
-pnpm + Turborepo monorepo.
+Monorepo managed with **pnpm** workspaces and **Turborepo**, hosting independent applications, shared packages, and cloud infrastructure.
 
-- `apps/web` — Next.js site (source in `src/`). See [apps/web/AGENTS.md](apps/web/AGENTS.md).
-- `packages/*` — shared packages (none yet).
+## Repository Layout
 
-Commands (from repo root):
+- `apps/*` — Standalone applications and services. Each application is independently deployable and isolated:
+  - `apps/helgefolelse` — Next.js web application.
+- `packages/*` — Shared internal libraries, tooling, and configurations (`@repo/*` namespace):
+  - `packages/typescript-config` — Shared TypeScript configurations (`@repo/typescript-config`).
+  - `packages/eslint-config` — Shared ESLint configurations (`@repo/eslint-config`).
+- `infra/*` — Terraform infrastructure declarations, environments (`dev`, `production`), and policies.
+- `.github/*` — CI/CD workflows, reusable deployment pipelines, and repository automation.
 
-- `pnpm install`
-- `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm typecheck`
-- Single app: `pnpm turbo run build --filter=web`
+## Core Principles & Workspace Boundaries
 
-Use pnpm only; do not add `package-lock.json` or `yarn.lock`.
+- **Application Isolation**: Applications in `apps/*` must not import code directly from sibling applications. Reusable logic or configurations must be extracted to a shared package under `packages/*`.
+- **Domain Independence**: Keep application-specific domain logic local to that application. Shared packages under `packages/*` must remain generic and decoupled from individual app requirements.
+- **Dependency Hygiene**:
+  - Use `pnpm` exclusively. Never introduce `package-lock.json` or `yarn.lock`.
+  - Always link workspace packages using `workspace:*` (for example, `"@repo/typescript-config": "workspace:*"`).
+  - Keep `pnpm-lock.yaml` synchronized when modifying dependency manifests.
+- **Decoupled Infrastructure**: Routine application deployments (`.github/workflows/deploy.yml`) handle container rollouts, smoke verification, and traffic promotion. Infrastructure and IAM changes are managed strictly via dedicated infrastructure pipelines (`.github/workflows/infra.yml`).
+
+## Commands (Repo Root)
+
+- **Install**: `pnpm install`
+- **Development**: `pnpm dev`
+- **Build**: `pnpm build`
+- **Testing**: `pnpm test` (unit/integration) / `pnpm test:e2e` (end-to-end)
+- **Quality & Linting**: `pnpm lint` / `pnpm typecheck` / `pnpm format:check` / `pnpm lint:workflows`
+- **Format**: `pnpm format`
+- **Scoped Execution**:
+  - Run task for a specific app or package:
+    `pnpm turbo run <task> --filter=<target>` (e.g. `pnpm turbo run test --filter=helgefolelse`)
+  - Run task for a target and its dependencies:
+    `pnpm turbo run <task> --filter=<target>...`
+
+## Engineering Standards
+
+- **Verification**: Run affected tests, linting, and typechecks before committing changes.
+- **Commit Messages**: Follow Conventional Commits format (`type(scope): description`, e.g. `feat(helgefolelse): ...`, `fix(infra): ...`, `chore(deps): ...`).
+- **Health Checks**: Web applications and services exposing HTTP endpoints should provide a readiness and operational health check (e.g., `/api/health`) for container orchestrators and deployment smoke tests.
 
 <!-- BEGIN:turborepo-agent-rules -->
 

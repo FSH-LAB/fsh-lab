@@ -33,15 +33,17 @@ The workflows lint command requires actionlint locally (`brew install actionlint
 Run the app's smoke test against a local server with:
 
 ```sh
-SMOKE_URL=http://localhost:8080 SHA="$(git rev-parse HEAD)" pnpm --filter web test:smoke
+SMOKE_URL=http://localhost:8080 SHA="$(git rev-parse HEAD)" pnpm --filter helgefolelse test:smoke
 ```
 
 Start the server or container with the same `GIT_SHA` value. Unit tests do not need a running server.
 
 ## Delivery
 
-Pull requests run app and infrastructure checks without deploying. A push to `main` builds, scans, and attests one GHCR image, then deploys that same digest through `dev` and `production`. Production requires environment approval. Each deployment applies its Terraform configuration, smoke-tests a no-traffic Cloud Run revision, and promotes it only after the test passes.
+Pull requests run app and infrastructure checks without deploying. A push to `main` builds, scans, and attests one GHCR image, then deploys that same digest through `dev` and `production`. Production requires environment approval. Each application deployment smoke-tests a no-traffic Cloud Run revision and promotes it only after the test passes.
+
+Infrastructure changes in `infra/` are deployed independently via the Infrastructure workflow on push to `main` (with production environment approval).
 
 Run **Deploy** manually on `main` with an older commit SHA or release tag to redeploy or roll back. Infrastructure ownership and operator commands are in [infra/README.md](infra/README.md).
 
-Use pnpm for workspace dependencies: `pnpm --filter web add <package>`, then commit `pnpm-lock.yaml`.
+Use pnpm for workspace dependencies: `pnpm --filter helgefolelse add <package>`, then commit `pnpm-lock.yaml`.

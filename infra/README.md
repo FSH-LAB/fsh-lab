@@ -1,6 +1,6 @@
 # Infrastructure
 
-The deployment workflows apply one Terraform configuration for each environment (`dev`, `production`). A separate root manages GitHub environments and deployment variables.
+The dedicated Infrastructure workflow applies the Terraform configuration for each environment (`dev`, `production`) on push to `main` when `infra/` changes. Application deployment workflows update Cloud Run revisions without running Terraform. A separate root manages GitHub environments and deployment variables.
 
 All environments use `europe-north2`. The region is fixed in Terraform to match the deployment workflow and registry endpoint.
 

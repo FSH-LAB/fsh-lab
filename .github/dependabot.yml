@@ -23,7 +23,7 @@ updates:
           - "*"
 
   - package-ecosystem: docker
-    directory: /apps/web
+    directory: /apps/helgefolelse
     schedule:
       interval: weekly
     cooldown:

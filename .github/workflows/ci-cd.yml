@@ -98,7 +98,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/web/Dockerfile
+          file: apps/helgefolelse/Dockerfile
           load: true
           tags: helgefolelse-web:ci
           cache-from: type=gha,scope=web
@@ -106,7 +106,7 @@ jobs:
         run: |
           docker run --detach --name web --publish 8080:8080 \
             --env GIT_SHA="$GITHUB_SHA" helgefolelse-web:ci
-          if ! SHA="$GITHUB_SHA" SMOKE_URL=http://localhost:8080 node --test apps/web/tests/smoke.mjs; then
+          if ! SHA="$GITHUB_SHA" SMOKE_URL=http://localhost:8080 node --test apps/helgefolelse/tests/smoke.mjs; then
             docker logs web
             exit 1
           fi
@@ -150,7 +150,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/web/Dockerfile
+          file: apps/helgefolelse/Dockerfile
           push: true
           tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
           labels: |
@@ -178,7 +178,7 @@ jobs:
     needs: publish
     permissions:
       attestations: read # Verify image provenance.
-      contents: read # Check out Terraform and smoke tests.
+      contents: read # Check out smoke tests.
       packages: write # Pull the image and update its environment tag.
       id-token: write # Authenticate to GCP using Workload Identity Federation.
     uses: ./.github/workflows/deploy.yml # zizmor: ignore[self-repository] -- actionlint 1.7.12 does not support $/ workflow calls.
@@ -186,12 +186,14 @@ jobs:
       environment: dev
       release: ${{ github.sha }}
       digest: ${{ needs.publish.outputs.digest }}
+      app: helgefolelse
+      service: helgefolelse-web
 
   deploy-production:
     needs: [publish, deploy-dev]
     permissions:
       attestations: read # Verify image provenance.
-      contents: read # Check out Terraform and smoke tests.
+      contents: read # Check out smoke tests.
       packages: write # Pull the image and update its environment tag.
       id-token: write # Authenticate to GCP using Workload Identity Federation.
     uses: ./.github/workflows/deploy.yml # zizmor: ignore[self-repository] -- actionlint 1.7.12 does not support $/ workflow calls.
@@ -199,6 +201,8 @@ jobs:
       environment: production
       release: ${{ github.sha }}
       digest: ${{ needs.publish.outputs.digest }}
+      app: helgefolelse
+      service: helgefolelse-web
 
   release:
     name: Create release

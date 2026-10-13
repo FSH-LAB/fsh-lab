@@ -1,15 +1,36 @@
 ---
 name: code-review
-description: "Review pull requests in this repository with GitHub Copilot code review. Use for PR reviews to find actionable bugs, security issues, and regressions in the Next.js web app, Oslo-time weekend calculations, and GitHub Actions deployment workflows."
+description: "Review pull requests across the monorepo to find actionable bugs, regressions, security risks, boundary violations, and test coverage gaps across applications, shared packages, and infrastructure."
 ---
 
 # Code review
 
-Review the pull request diff against the base branch. Read nearby callers and tests when needed to establish whether a change actually breaks behavior. Follow the repository's `AGENTS.md` guidance and report only issues introduced by the pull request, not pre-existing problems or speculative style preferences.
+Review the pull request diff against the base branch. Read nearby callers, types, and tests when needed to establish whether a change introduces defects or breaks contracts. Follow the repository's `AGENTS.md` guidelines and report only issues introduced by the pull request, not pre-existing problems or speculative stylistic preferences.
 
-1. Check changed behavior and its callers for incorrect outputs, missing edge cases, security risks, and test coverage that would catch a real regression. For `apps/web/src/lib/helgefolelse.ts`, pay particular attention to Europe/Oslo time, week boundaries (Friday 16:00 and Sunday 00:00), and daylight saving transitions. For changes to the time-driven UI, check hydration and timer cleanup. For `.github/workflows/` and the Dockerfile, check event and permission boundaries, untrusted inputs, image provenance, and whether deployment uses the intended commit and digest.
-2. Check each commit message uses a meaningful Conventional Commits-style prefix, such as `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, or `chore:`; an optional scope may follow the type (for example, `docs(review): ...`). Also check for a concise subject line (ideally 50 characters or fewer), a blank line before the body, and body lines wrapped at about 72 characters.
-3. Use existing tests and checks when practical: `pnpm --filter web test`, `pnpm --filter web lint`, and `pnpm --filter web typecheck`. Do not treat a passing check as proof that changed behavior is correct; do not claim to have run a check unless it ran.
-4. Leave concise, actionable review comments on the relevant changed lines. For each issue, explain the failure scenario and impact, and suggest a correction when clear. Prioritize by severity; avoid duplicate comments and do not request changes for preferences alone. If no actionable issue is found, do not invent one.
+## Review Checklist
 
-Keep the review focused on the diff. Do not edit code as part of the review.
+1. **Correctness, Boundaries & Domain Logic**:
+   - Check changed logic and callers for incorrect outputs, off-by-one errors, unhandled edge cases, missing error boundaries, and asynchronous lifecycle leaks (e.g., timers, observers, event listeners).
+   - Enforce workspace boundaries: applications under `apps/*` must not import sibling applications directly; shared logic belongs in `packages/*` and must remain generic.
+   - For UI changes, verify client-server hydration safety, state initialization, accessibility, and responsive layouts.
+
+2. **Security & Supply Chain**:
+   - In CI/CD workflows (`.github/workflows/`), verify least-privilege token permissions, action pinning by full commit SHA, input sanitization against script injection, and verifiable build provenance.
+   - In container configurations (`Dockerfile`), check for multi-stage pruning, non-root execution, minimal attack surface, and pinned base digests.
+   - In Infrastructure (`infra/`), verify resource protections, environment separation (`dev` vs `production`), and that no secrets or sensitive values are committed.
+
+3. **Testing & Verification**:
+   - Verify that new or modified behavior has accompanying automated tests (unit, integration, or E2E) capable of preventing real regressions.
+   - Run scoped verification checks against affected workspaces when practical: `pnpm turbo run test lint typecheck --filter=<target>`.
+   - Do not claim a check was executed unless it actually ran; do not treat passing tests alone as complete proof of correctness.
+
+4. **Commit Hygiene & Standards**:
+   - Ensure commit messages follow Conventional Commits format (`type(scope): description`, such as `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, or `chore:`).
+   - Keep subject lines concise (ideally under 50 characters) with an optional body explaining the rationale.
+
+5. **Feedback & Actionability**:
+   - Leave concise, actionable review comments anchored to relevant lines in the diff.
+   - For each issue, clearly describe the failure scenario, impact, and a concrete suggestion or fix.
+   - Prioritize by severity. Do not comment on formatting or style issues handled by Prettier and ESLint. If no actionable issue is found, do not invent one.
+
+Keep the review strictly focused on the diff. Do not edit code as part of a review.
