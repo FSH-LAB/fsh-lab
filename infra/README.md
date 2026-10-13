@@ -1,6 +1,6 @@
 # Infrastructure
 
-The deployment workflows apply one Terraform configuration for each environment (`dev`, `staging`, `production`). A separate root manages GitHub environments and deployment variables.
+The deployment workflows apply one Terraform configuration for each environment (`dev`, `production`). A separate root manages GitHub environments and deployment variables.
 
 All environments use `europe-north2`. The region is fixed in Terraform to match the deployment workflow and registry endpoint.
 
@@ -37,7 +37,7 @@ The verification must return `true`. If it fails, inspect and remove any conditi
 Use this for changes the CI identity cannot apply. Authenticate with `gcloud auth application-default login`, choose an environment, and review the saved plan before applying. Do not run it while that environment is deploying.
 
 ```sh
-ENV=dev # staging or production
+ENV=dev # or production
 PROJECT=$(sed -n 's/^project_id *= *"\(.*\)"/\1/p' "infra/environments/$ENV.tfvars")
 export TF_DATA_DIR="$PWD/infra/.terraform/$ENV"
 
@@ -54,9 +54,9 @@ terraform -chdir=infra apply "$ENV.tfplan"
 Before enabling automated deploys, the environment's GCS state must track the existing project and application resources. Never let CI initialize an empty state for a project that already contains these resources. Run from the repository root with operator credentials. If local state already tracks the environment, use `-migrate-state` instead of `-reconfigure` and verify the remote state before continuing.
 
 ```sh
-ENV=staging # or dev / production
-PROJECT=hazel-core-510411-b1 # set the matching project ID
-NUMBER=288502766582 # set the matching GCP project number
+ENV=dev # or production
+PROJECT=quick-pointer-510215-s6 # set the matching project ID
+NUMBER=475851250732 # set the matching GCP project number
 export TF_DATA_DIR="$PWD/infra/.terraform/gcp-$ENV"
 terraform -chdir=infra init -reconfigure \
   -backend-config="bucket=$PROJECT-terraform-state" \
@@ -100,10 +100,10 @@ Review the plan. Existing core resources must not be created or replaced; expect
 
 ## Fresh project bootstrap
 
-The GCS backend must exist before Terraform can initialize. For a fresh project in one of the three supported environment slots, create the project and state bucket once, then import them so Terraform can manage them:
+The GCS backend must exist before Terraform can initialize. For a fresh project in one of the supported environment slots, create the project and state bucket once, then import them so Terraform can manage them:
 
 ```sh
-ENV=dev # staging or production
+ENV=dev # or production
 PROJECT=your-project-id # also set this in infra/environments/$ENV.tfvars
 PROJECT_NAME="Helgefolelse $ENV"
 FOLDER_ID=your-folder-id

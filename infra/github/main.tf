@@ -24,7 +24,6 @@ locals {
 
   environments = {
     dev        = { project_id = "quick-pointer-510215-s6", project_number = "475851250732" }
-    staging    = { project_id = "hazel-core-510411-b1", project_number = "288502766582" }
     production = { project_id = "generated-mote-510411-v8", project_number = "423756211110" }
   }
 

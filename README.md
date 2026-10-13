@@ -40,7 +40,7 @@ Start the server or container with the same `GIT_SHA` value. Unit tests do not n
 
 ## Delivery
 
-Pull requests run app and infrastructure checks without deploying. A push to `main` builds, scans, and attests one GHCR image, then deploys that same digest through `dev`, `staging`, and `production`. Staging and production require environment approval. Each deployment applies its Terraform configuration, smoke-tests a no-traffic Cloud Run revision, and promotes it only after the test passes.
+Pull requests run app and infrastructure checks without deploying. A push to `main` builds, scans, and attests one GHCR image, then deploys that same digest through `dev` and `production`. Production requires environment approval. Each deployment applies its Terraform configuration, smoke-tests a no-traffic Cloud Run revision, and promotes it only after the test passes.
 
 Run **Deploy** manually on `main` with an older commit SHA or release tag to redeploy or roll back. Infrastructure ownership and operator commands are in [infra/README.md](infra/README.md).
 

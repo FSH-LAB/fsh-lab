@@ -19,7 +19,7 @@ on:
         description: Environment to deploy to
         required: true
         type: choice
-        options: [dev, staging, production]
+        options: [dev, production]
       release:
         description: Commit SHA or release tag (for example v2026.10.42) to deploy or roll back to
         required: true
