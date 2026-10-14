@@ -13,6 +13,28 @@ Terraform owns infrastructure; the deploy workflow owns the image, `GIT_SHA`, re
 
 The deployer can write state and lock objects only under `helgefolelse/<env>/`. It cannot write the operator-owned `helgefolelse/github/` prefix or change bucket IAM/settings. Project read roles still allow reading state; this is write isolation, not confidentiality isolation.
 
+## Application Modules (`infra/modules/cloud-run-app`)
+
+Each application in the monorepo is declared using the `cloud-run-app` module in `infra/main.tf`:
+
+- Provisions a dedicated Artifact Registry repository (`projects/<project>/locations/<region>/repositories/<app>`)
+- Creates an isolated Cloud Run runtime service account (`<app>-runtime@...`)
+- Deploys the Cloud Run service (`<app>-web`) with deletion protection and candidate traffic tagging
+- Grants the deployer service account permission to act as the app runtime identity
+
+To add a new application to the environment, declare a new module instance in `infra/main.tf`:
+
+```hcl
+module "my_app" {
+  source         = "./modules/cloud-run-app"
+  app            = "my-app"
+  display_name   = "My Application"
+  project_id     = google_project.environment.project_id
+  region         = local.region
+  deployer_email = google_service_account.deployer.email
+}
+```
+
 To roll out this permission boundary, pause deployments and apply the GCP root with operator credentials in each environment. The plan must add the conditional bucket grant. It removes the deployer's project-wide `roles/storage.admin` grant only if that grant was already tracked in this state; additive IAM resources do not remove unmanaged grants. CI cannot apply this IAM change itself.
 
 After applying, remove any remaining unconditional legacy membership and verify that no project-level `storage.admin` membership remains for the deployer. Run this for each environment, with `PROJECT` set as in the manual GCP commands below:

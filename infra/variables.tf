@@ -28,5 +28,5 @@ variable "billing_account_id" {
 
 variable "github_repository" {
   type    = string
-  default = "FSH-LAB/helgefolelse"
+  default = "FSH-LAB/fsh-lab"
 }
