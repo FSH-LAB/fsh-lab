@@ -114,7 +114,7 @@ jobs:
       contents: read # Check out smoke tests.
       packages: write # Pull the image and update its environment tag.
       id-token: write # Authenticate to GCP using Workload Identity Federation.
-    uses: ./.github/workflows/deploy.yml # zizmor: ignore[self-repository] -- actionlint 1.7.12 does not support $/ workflow calls.
+    uses: ./.github/workflows/cd.yml # zizmor: ignore[self-repository] -- actionlint 1.7.12 does not support $/ workflow calls.
     with:
       environment: dev
       app: ${{ inputs.app }}
@@ -128,7 +128,7 @@ jobs:
       contents: read # Check out smoke tests.
       packages: write # Pull the image and update its environment tag.
       id-token: write # Authenticate to GCP using Workload Identity Federation.
-    uses: ./.github/workflows/deploy.yml # zizmor: ignore[self-repository] -- actionlint 1.7.12 does not support $/ workflow calls.
+    uses: ./.github/workflows/cd.yml # zizmor: ignore[self-repository] -- actionlint 1.7.12 does not support $/ workflow calls.
     with:
       environment: production
       app: ${{ inputs.app }}

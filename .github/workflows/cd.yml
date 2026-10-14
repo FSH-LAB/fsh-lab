@@ -1,4 +1,4 @@
-name: Deploy
+name: CD
 
 # Deploys one already-published app release to one environment.
 # Called by release-app.yml, or run manually to redeploy or roll back.
