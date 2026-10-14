@@ -1,0 +1,35 @@
+# __DISPLAY_NAME__ (`apps/__APP_NAME__`)
+
+__DISPLAY_NAME__ service in the FSH-LAB monorepo.
+
+## Architecture & Integration Contracts
+
+This service complies with the FSH-LAB monorepo standards:
+- **Port**: Listens on port `8080` (Cloud Run standard).
+- **Security**: Runs as unprivileged non-root user (UID 1000) in production containers.
+- **Operational Health**: Exposes `GET /api/health` returning `{ status: "ok", ready: true, commit, uptime }`.
+- **Smoke Testing**: Pre-promotion verification via `apps/__APP_NAME__/tests/smoke.mjs`.
+- **Infrastructure**: Managed via `infra/modules/cloud-run-app`.
+- **CI/CD**: Released via `.github/workflows/deploy-__APP_NAME__.yml`.
+
+## Local Development & Tasks
+
+```bash
+# Run local dev server (port __PORT__)
+pnpm --filter=__APP_NAME__ dev
+
+# Run linting, typecheck, and tests
+pnpm --filter=__APP_NAME__ lint
+pnpm --filter=__APP_NAME__ typecheck
+pnpm --filter=__APP_NAME__ test
+
+# Run candidate smoke test
+SMOKE_URL=http://localhost:__PORT__ SHA=<git-sha> pnpm --filter=__APP_NAME__ test:smoke
+```
+
+## Customizing this Service
+
+This directory was scaffolded as a minimal, runnable boundary baseline. You can replace the internal runtime (e.g. Go, Python, Rust, Node/Fastify) while keeping the boundary contracts:
+1. Update `package.json` scripts to invoke your native toolchain.
+2. Update `Dockerfile` to compile and package your application (maintaining UID 1000 and port `8080`).
+3. Ensure `GET /api/health` returns the operational health JSON contract.

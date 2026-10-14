@@ -1,0 +1,41 @@
+import http from "node:http";
+
+const port = parseInt(process.env.PORT || "__PORT__", 10);
+const commit = process.env.GIT_SHA || null;
+const startTime = Date.now();
+
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+
+  if (url.pathname === "/api/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        status: "ok",
+        ready: true,
+        commit,
+        uptime: Math.floor((Date.now() - startTime) / 1000),
+      }),
+    );
+    return;
+  }
+
+  if (url.pathname === "/") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        name: "__DISPLAY_NAME__",
+        status: "ok",
+      }),
+    );
+    return;
+  }
+
+  res.writeHead(404, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "Not found" }));
+});
+
+server.listen(port, () => {
+  console.log(`__DISPLAY_NAME__ listening on port ${port}`);
+});
+

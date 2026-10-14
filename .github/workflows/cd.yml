@@ -31,7 +31,7 @@ on:
         description: Application to deploy
         required: true
         type: choice
-        options: [helgefolelse]
+        options: [helgefolelse, status]
       release:
         description: Commit SHA or release tag (for example helgefolelse@v2026.10.3) to deploy or roll back to
         required: true
