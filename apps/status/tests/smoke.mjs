@@ -45,5 +45,9 @@ test(
     const data = JSON.parse(await request("/api/status.json"));
     assert.equal(data.page.id, "fsh-lab-status");
     assert.ok(Array.isArray(data.services));
+    assert.match(
+      data.status.indicator,
+      /^(none|minor|major|critical|maintenance)$/,
+    );
   },
 );

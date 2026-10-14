@@ -28,6 +28,23 @@ export function ServiceCard({ service }: ServiceCardProps) {
   ).toFixed(2);
   const uptime90d = service.uptime90d.toFixed(2);
 
+  // Derive 24-hour uptime from live status and today's observation
+  const todayEntry = days[days.length - 1];
+  let uptime24h = (todayEntry?.uptimePercentage ?? 100.0).toFixed(1);
+  let uptime24hColor = "text-emerald-400";
+  if (service.status === "major_outage") {
+    uptime24h = "0.0";
+    uptime24hColor = "text-rose-400";
+  } else if (
+    service.status === "partial_outage" ||
+    service.status === "degraded_performance"
+  ) {
+    uptime24h = Math.min(Number(uptime24h), 95.0).toFixed(1);
+    uptime24hColor = "text-amber-400";
+  } else if (todayEntry && todayEntry.uptimePercentage < 100) {
+    uptime24hColor = "text-amber-400";
+  }
+
   const categoryName =
     service.category === "apps"
       ? "Application"
@@ -77,13 +94,23 @@ export function ServiceCard({ service }: ServiceCardProps) {
 
         {/* Status Pill & Live Latency */}
         <div className="flex items-center gap-2 self-start sm:self-center">
-          <span
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-slate-800/80 border-slate-700/60 text-slate-300"
-            title="Live ping latency"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-mono">{service.currentLatencyMs}ms</span>
-          </span>
+          {service.probeType === "platform_managed" ? (
+            <span
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-slate-800/80 border-slate-700/60 text-slate-400"
+              title="Cloud platform managed component"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+              <span>Platform Managed</span>
+            </span>
+          ) : (
+            <span
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-slate-800/80 border-slate-700/60 text-slate-300"
+              title="Live ping latency"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-mono">{service.currentLatencyMs}ms</span>
+            </span>
+          )}
 
           <span
             className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${badge.badgeBg} ${badge.badgeText} ${badge.borderColor}`}
@@ -136,8 +163,10 @@ export function ServiceCard({ service }: ServiceCardProps) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
             <div className="bg-slate-950/40 border border-slate-800/60 rounded-lg p-2.5">
               <div className="text-[11px] text-slate-400">Past 24 Hours</div>
-              <div className="text-sm font-semibold text-emerald-400 font-mono mt-0.5">
-                100.0%
+              <div
+                className={`text-sm font-semibold ${uptime24hColor} font-mono mt-0.5`}
+              >
+                {uptime24h}%
               </div>
             </div>
             <div className="bg-slate-950/40 border border-slate-800/60 rounded-lg p-2.5">

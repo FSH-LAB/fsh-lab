@@ -4,9 +4,12 @@ import { useCallback, useEffect, useState, useTransition } from "react";
 import { calculateSystemStatus } from "@/lib/status";
 import type {
   Incident,
+  ProbeResult,
+  ProbeType,
   ScheduledMaintenance,
   ServiceCategory,
   ServiceComponent,
+  ServiceStatus,
   SystemStatusSummary,
 } from "@/lib/types";
 import { FutureAppsCard } from "./FutureAppsCard";
@@ -59,10 +62,7 @@ export function StatusDashboard({
       });
       if (!res.ok) return;
       const data = await res.json();
-      const results = data.results as Record<
-        string,
-        { status: string; latencyMs: number }
-      >;
+      const results = data.results as Record<string, ProbeResult>;
 
       startTransition(() => {
         setServices((prev) => {
@@ -71,6 +71,8 @@ export function StatusDashboard({
             if (!probe) return service;
             return {
               ...service,
+              status: (probe.status as ServiceStatus) || service.status,
+              probeType: (probe.probeType as ProbeType) || service.probeType,
               currentLatencyMs: probe.latencyMs,
             };
           });
@@ -123,6 +125,7 @@ export function StatusDashboard({
         {/* Hero status banner */}
         <HeroBanner
           summary={summary}
+          services={services}
           isProbing={isPending}
           onRefresh={runLiveProbe}
           secondsAgo={secondsAgo}

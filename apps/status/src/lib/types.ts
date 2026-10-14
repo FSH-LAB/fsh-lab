@@ -27,12 +27,26 @@ export interface ServiceMetricPoint {
   latencyMs: number;
 }
 
+export type ProbeType = "http_probe" | "platform_managed";
+
+export interface ProbeResult {
+  id: string;
+  name: string;
+  status: ServiceStatus;
+  latencyMs: number;
+  probeType: ProbeType;
+  statusCode?: number;
+  error?: string;
+  timestamp: string;
+}
+
 export interface ServiceComponent {
   id: string;
   name: string;
   category: ServiceCategory;
   description: string;
   status: ServiceStatus;
+  probeType?: ProbeType;
   healthEndpoint?: string; // e.g. "/api/health" or "https://..."
   appUrl?: string; // Public app link
   uptime90d: number; // e.g. 99.98

@@ -21,6 +21,7 @@ export function generate90DayHistory(
     { status: ServiceStatus; count: number; desc: string; uptimePct?: number }
   > = {},
   now: Date = new Date(),
+  currentStatus: ServiceStatus = "operational",
 ): DayUptime[] {
   const days: DayUptime[] = [];
 
@@ -28,6 +29,21 @@ export function generate90DayHistory(
     const d = new Date(now);
     d.setUTCDate(d.getUTCDate() - i);
     const dateStr = d.toISOString().split("T")[0]!;
+
+    // For today (index 89, i === 0), derive state from current live observation
+    if (i === 0 && currentStatus !== "operational") {
+      days.push({
+        date: dateStr,
+        status: currentStatus,
+        uptimePercentage: currentStatus === "major_outage" ? 0 : 85.0,
+        incidentCount: 1,
+        description:
+          currentStatus === "major_outage"
+            ? "Service outage observed during live health probing."
+            : "Degraded performance observed during live health probing.",
+      });
+      continue;
+    }
 
     if (incidentDays[dateStr]) {
       const override = incidentDays[dateStr]!;
@@ -127,7 +143,9 @@ export function calculateSystemStatus(
   const hasMajor = services.some((s) => s.status === "major_outage");
   const hasPartial = services.some((s) => s.status === "partial_outage");
   const hasDegraded = services.some((s) => s.status === "degraded_performance");
-  const hasMaintenance = services.some((s) => s.status === "maintenance");
+  const hasMaintenance =
+    services.some((s) => s.status === "maintenance") ||
+    activeMaintenances.some((m) => m.status === "in_progress");
 
   if (hasMajor) {
     worstStatus = "major_outage";

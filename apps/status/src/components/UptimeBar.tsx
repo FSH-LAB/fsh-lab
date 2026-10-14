@@ -66,15 +66,22 @@ export function UptimeBar({ days, uptime90d }: UptimeBarProps) {
         {days.map((day, idx) => {
           const pct = ((idx + 0.5) / days.length) * 100;
           return (
-            <div
+            <button
+              type="button"
               key={day.date}
+              tabIndex={0}
               onMouseEnter={() => {
                 setHoveredDay(day);
                 setHoverPosition(pct);
               }}
               onMouseLeave={() => setHoveredDay(null)}
-              className={`flex-1 h-full rounded-[2px] transition-all cursor-pointer ${getBarColor(day)}`}
-              aria-label={`${day.date}: ${day.status}`}
+              onFocus={() => {
+                setHoveredDay(day);
+                setHoverPosition(pct);
+              }}
+              onBlur={() => setHoveredDay(null)}
+              className={`flex-1 h-full rounded-[2px] transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-white/80 focus:scale-110 focus:z-10 ${getBarColor(day)}`}
+              aria-label={`${day.date}: ${day.status.replace("_", " ")}, ${day.uptimePercentage.toFixed(1)}% uptime`}
             />
           );
         })}

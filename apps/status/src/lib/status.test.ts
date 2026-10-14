@@ -39,6 +39,23 @@ describe("status logic", () => {
     expect(targetDay?.incidentCount).toBe(1);
   });
 
+  it("derives today's uptime entry from active outage observations", () => {
+    const fixedDate = new Date("2026-10-14T10:00:00.000Z");
+    const history = generate90DayHistory(
+      "test",
+      99.99,
+      {},
+      fixedDate,
+      "major_outage",
+    );
+
+    const today = history[history.length - 1];
+    expect(today?.date).toBe("2026-10-14");
+    expect(today?.status).toBe("major_outage");
+    expect(today?.uptimePercentage).toBe(0);
+    expect(today?.incidentCount).toBe(1);
+  });
+
   it("calculates all systems operational when clean", () => {
     const mockServices: ServiceComponent[] = [
       {
@@ -113,6 +130,39 @@ describe("status logic", () => {
     const summary = calculateSystemStatus(mockServices, activeIncidents);
     expect(summary.level).toBe("major_outage");
     expect(summary.activeIncidentsCount).toBe(1);
+  });
+
+  it("escalates system status to maintenance when active maintenance is in progress", () => {
+    const mockServices: ServiceComponent[] = [
+      {
+        id: "app1",
+        name: "App 1",
+        category: "apps",
+        description: "Test app",
+        status: "operational",
+        uptime90d: 100,
+        currentLatencyMs: 15,
+        days: [],
+        metrics24h: { avgLatencyMs: 15, p95LatencyMs: 18, points: [] },
+      },
+    ];
+
+    const maintenances = [
+      {
+        id: "m-1",
+        title: "Kernel upgrade",
+        status: "in_progress" as const,
+        affectedServiceIds: ["app1"],
+        scheduledStart: "2026-10-14T10:00:00Z",
+        scheduledEnd: "2026-10-14T11:00:00Z",
+        description: "Patching kernel",
+      },
+    ];
+
+    const summary = calculateSystemStatus(mockServices, [], maintenances);
+    expect(summary.level).toBe("maintenance");
+    expect(summary.headline).toBe("Scheduled Maintenance in Progress");
+    expect(summary.activeMaintenanceCount).toBe(1);
   });
 
   it("returns appropriate badge metadata for all status types", () => {

@@ -107,7 +107,7 @@ export const MONITORED_SERVICES_CONFIG: MonitoredServiceConfig[] = [
       "2026-08-27": {
         status: "degraded_performance",
         count: 1,
-        desc: "Scheduled GCP IAM maintenance in europe-north2 region (no user impact).",
+        desc: "Upstream OIDC latency during Workload Identity token federation (resolved).",
         uptimePct: 99.6,
       },
     },
@@ -122,11 +122,15 @@ export function buildMonitoredService(
   overrides?: Partial<ServiceComponent>,
   now: Date = new Date(),
 ): ServiceComponent {
+  const currentStatus =
+    overrides?.status ?? config.defaultStatus ?? "operational";
+
   const days = generate90DayHistory(
     config.id,
     config.targetUptime,
     config.incidentOverrides,
     now,
+    currentStatus,
   );
 
   const metrics24h = generate24hMetrics(
@@ -168,13 +172,27 @@ export function getAllMonitoredServices(
 }
 
 /**
- * Helper to register a new application dynamically at runtime or in future extensions.
+ * Constructs an application configuration for monitoring.
  */
-export function registerNewApp(
+export function createMonitoredAppConfig(
   app: Omit<MonitoredServiceConfig, "category">,
 ): MonitoredServiceConfig {
   return {
     ...app,
     category: "apps",
   };
+}
+
+/**
+ * Registers an application configuration in the runtime monitored registry.
+ */
+export function registerService(config: MonitoredServiceConfig): void {
+  const existingIdx = MONITORED_SERVICES_CONFIG.findIndex(
+    (s) => s.id === config.id,
+  );
+  if (existingIdx >= 0) {
+    MONITORED_SERVICES_CONFIG[existingIdx] = config;
+  } else {
+    MONITORED_SERVICES_CONFIG.push(config);
+  }
 }

@@ -3,11 +3,46 @@ import {
   PAST_INCIDENTS,
   SCHEDULED_MAINTENANCES,
 } from "@/lib/incidents";
+import { getProbeSnapshot } from "@/lib/probe";
 import { getAllMonitoredServices } from "@/lib/services";
 import { calculateSystemStatus } from "@/lib/status";
+import type { ServiceComponent, SystemStatusLevel } from "@/lib/types";
 
-export function GET() {
-  const services = getAllMonitoredServices();
+/**
+ * Maps internal system status level to standard Statuspage indicator vocabulary:
+ * "none", "minor", "major", "critical", or "maintenance".
+ */
+export function mapLevelToStandardIndicator(
+  level: SystemStatusLevel,
+): "none" | "minor" | "major" | "critical" | "maintenance" {
+  switch (level) {
+    case "operational":
+      return "none";
+    case "degraded_performance":
+      return "minor";
+    case "partial_outage":
+      return "major";
+    case "major_outage":
+      return "critical";
+    case "maintenance":
+      return "maintenance";
+  }
+}
+
+export async function GET() {
+  // Read live/cached probe results so status.json reflects active outages
+  const probeResults = await getProbeSnapshot();
+
+  const overrides: Record<string, Partial<ServiceComponent>> = {};
+  for (const [id, probe] of Object.entries(probeResults)) {
+    overrides[id] = {
+      status: probe.status,
+      currentLatencyMs: probe.latencyMs,
+      probeType: probe.probeType,
+    };
+  }
+
+  const services = getAllMonitoredServices(overrides);
   const summary = calculateSystemStatus(
     services,
     ACTIVE_INCIDENTS,
@@ -23,7 +58,7 @@ export function GET() {
       updated_at: summary.lastChecked,
     },
     status: {
-      indicator: summary.level === "operational" ? "none" : summary.level,
+      indicator: mapLevelToStandardIndicator(summary.level),
       description: summary.headline,
       level: summary.level,
       overall_uptime_90d: summary.overallUptime90d,
@@ -34,6 +69,7 @@ export function GET() {
       category: s.category,
       description: s.description,
       status: s.status,
+      probe_type: s.probeType ?? "platform_managed",
       uptime_90d: s.uptime90d,
       current_latency_ms: s.currentLatencyMs,
     })),

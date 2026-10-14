@@ -2,6 +2,7 @@ output "service_urls" {
   description = "Cloud Run URL per app."
   value = {
     helgefolelse = module.helgefolelse.service_url
+    status       = module.status.service_url
   }
 }
 

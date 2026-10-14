@@ -1,6 +1,6 @@
 # FSH Lab Status (`apps/status`)
 
-A system status and uptime monitoring web application for FSH Lab. Provides real-time availability, incident tracking, response latency metrics, and scheduled maintenance notices for current applications (such as [Helgefølelse](file:///Users/fredrik.sundt-hansen/Github/helgefolelse/apps/helgefolelse)) and future apps.
+A system status and uptime monitoring web application for FSH Lab. Provides real-time availability, incident tracking, response latency metrics, and scheduled maintenance notices for current applications (such as [Helgefølelse](../helgefolelse)) and future apps.
 
 ## Key Features
 
