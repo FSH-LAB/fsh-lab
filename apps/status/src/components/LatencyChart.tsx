@@ -18,7 +18,13 @@ export function LatencyChart({
     null,
   );
 
-  if (!points || points.length === 0) return null;
+  if (!points || points.length === 0) {
+    return (
+      <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-4 text-center text-xs text-slate-400">
+        Live telemetry accumulating. Awaiting health probe measurements...
+      </div>
+    );
+  }
 
   const maxLatency = Math.max(...points.map((p) => p.latencyMs), 60);
   const minLatency = Math.min(...points.map((p) => p.latencyMs), 5);
@@ -26,11 +32,14 @@ export function LatencyChart({
 
   const width = 600;
   const height = 120;
-  const paddingX = 10;
+  const paddingX = 15;
   const paddingY = 15;
 
   const svgPoints = points.map((p, idx) => {
-    const x = paddingX + (idx / (points.length - 1)) * (width - paddingX * 2);
+    const x =
+      points.length === 1
+        ? width / 2
+        : paddingX + (idx / (points.length - 1)) * (width - paddingX * 2);
     const y =
       height -
       paddingY -
@@ -38,25 +47,38 @@ export function LatencyChart({
     return { x, y, point: p };
   });
 
-  const pathD = svgPoints.reduce((acc, curr, idx) => {
-    return `${acc} ${idx === 0 ? "M" : "L"} ${curr.x.toFixed(1)},${curr.y.toFixed(1)}`;
-  }, "");
+  const pathD =
+    points.length === 1
+      ? `M ${paddingX},${svgPoints[0]?.y.toFixed(1)} L ${width - paddingX},${svgPoints[0]?.y.toFixed(1)}`
+      : svgPoints.reduce((acc, curr, idx) => {
+          return `${acc} ${idx === 0 ? "M" : "L"} ${curr.x.toFixed(1)},${curr.y.toFixed(1)}`;
+        }, "");
 
-  const areaD = `${pathD} L ${svgPoints[svgPoints.length - 1]?.x.toFixed(1)},${height - paddingY} L ${svgPoints[0]?.x.toFixed(1)},${height - paddingY} Z`;
+  const areaD =
+    points.length === 1
+      ? `M ${paddingX},${svgPoints[0]?.y.toFixed(1)} L ${width - paddingX},${svgPoints[0]?.y.toFixed(1)} L ${width - paddingX},${height - paddingY} L ${paddingX},${height - paddingY} Z`
+      : `${pathD} L ${svgPoints[svgPoints.length - 1]?.x.toFixed(1)},${height - paddingY} L ${svgPoints[0]?.x.toFixed(1)},${height - paddingY} Z`;
+
+  const firstTimestamp = points[0]?.timestamp ?? "";
+  const lastTimestamp = points[points.length - 1]?.timestamp ?? "";
 
   return (
     <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between text-xs gap-2">
         <div className="flex items-center gap-2">
           <span className="font-medium text-slate-300">
-            24-Hour Response Latency
+            Response Latency Telemetry
           </span>
           {hoveredPoint ? (
             <span className="text-emerald-400 font-mono">
               {hoveredPoint.timestamp} UTC: {hoveredPoint.latencyMs}ms
             </span>
           ) : (
-            <span className="text-slate-500">Hourly ping averages</span>
+            <span className="text-slate-500">
+              {points.length === 1
+                ? "Live observation"
+                : `${points.length} observed samples`}
+            </span>
           )}
         </div>
         <div className="flex items-center gap-3 font-mono text-[11px]">
@@ -135,9 +157,13 @@ export function LatencyChart({
       </div>
 
       <div className="flex justify-between text-[11px] text-slate-500 font-mono">
-        <span>24 hours ago</span>
-        <span>12 hours ago</span>
-        <span>Just now</span>
+        <span>{firstTimestamp ? `${firstTimestamp} (Start)` : ""}</span>
+        <span>
+          {points.length > 1
+            ? `Telemetry window (${points.length} samples)`
+            : "Live ping sample"}
+        </span>
+        <span>{lastTimestamp ? `${lastTimestamp} (Latest)` : "Just now"}</span>
       </div>
     </div>
   );

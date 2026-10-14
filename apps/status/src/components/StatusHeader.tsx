@@ -3,13 +3,11 @@
 interface StatusHeaderProps {
   autoRefresh: boolean;
   onToggleAutoRefresh: () => void;
-  onOpenSubscribe: () => void;
 }
 
 export function StatusHeader({
   autoRefresh,
   onToggleAutoRefresh,
-  onOpenSubscribe,
 }: StatusHeaderProps) {
   return (
     <header className="border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md sticky top-0 z-30">
@@ -28,9 +26,6 @@ export function StatusHeader({
                 STATUS
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">
-              Uptime & Performance Monitoring
-            </p>
           </div>
         </div>
 
@@ -60,28 +55,6 @@ export function StatusHeader({
             <span className="text-[10px] font-mono text-slate-400">
               {autoRefresh ? "30s" : "Off"}
             </span>
-          </button>
-
-          {/* Subscribe to updates button */}
-          <button
-            type="button"
-            onClick={onOpenSubscribe}
-            className="text-xs px-3.5 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400 transition-colors shadow-sm flex items-center gap-1.5"
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-              />
-            </svg>
-            <span>Subscribe to Updates</span>
           </button>
         </div>
       </div>

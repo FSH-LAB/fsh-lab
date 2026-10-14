@@ -10,12 +10,62 @@ const CACHE_TTL_MS = 15_000; // 15 seconds cache to prevent outbound traffic amp
 let probeCache: ProbeCache | null = null;
 let activeProbePromise: Promise<Record<string, ProbeResult>> | null = null;
 
+// Real rolling telemetry buffer: stores actual observed probe latency measurements
+const probeTelemetryStore: Record<
+  string,
+  Array<{ timestamp: string; latencyMs: number }>
+> = {};
+const MAX_TELEMETRY_POINTS = 24;
+
 /**
- * Resets probe cache (primarily for unit testing).
+ * Resets probe cache and telemetry buffer (primarily for unit testing).
  */
 export function resetProbeCacheForTesting(): void {
   probeCache = null;
   activeProbePromise = null;
+  for (const key of Object.keys(probeTelemetryStore)) {
+    delete probeTelemetryStore[key];
+  }
+}
+
+/**
+ * Retrieves real rolling telemetry points and calculated latency for a service.
+ */
+export function getServiceTelemetry(
+  serviceId: string,
+  fallbackLatency = 0,
+): {
+  avgLatencyMs: number;
+  p95LatencyMs: number;
+  points: Array<{ timestamp: string; latencyMs: number }>;
+} {
+  const points = probeTelemetryStore[serviceId] ?? [];
+  if (points.length === 0) {
+    const singlePoint =
+      fallbackLatency > 0
+        ? [{ timestamp: "Live", latencyMs: fallbackLatency }]
+        : [];
+    return {
+      avgLatencyMs: fallbackLatency,
+      p95LatencyMs: fallbackLatency,
+      points: singlePoint,
+    };
+  }
+
+  const values = points.map((p) => p.latencyMs).sort((a, b) => a - b);
+  const sum = values.reduce((acc, v) => acc + v, 0);
+  const avgLatencyMs = Math.round(sum / values.length);
+  const p95Index = Math.min(
+    values.length - 1,
+    Math.floor(values.length * 0.95),
+  );
+  const p95LatencyMs = values[p95Index] ?? avgLatencyMs;
+
+  return {
+    avgLatencyMs,
+    p95LatencyMs,
+    points,
+  };
 }
 
 /**
@@ -54,7 +104,9 @@ export async function getProbeSnapshot(options?: {
 
     await Promise.all(
       targets.map(async (service) => {
-        const timestampIso = new Date().toISOString();
+        const nowDate = new Date();
+        const timestampIso = nowDate.toISOString();
+        const timeLabel = `${String(nowDate.getUTCHours()).padStart(2, "0")}:${String(nowDate.getUTCMinutes()).padStart(2, "0")}`;
 
         // 1. Platform / Infrastructure services without dedicated HTTP health check
         if (!service.healthEndpoint) {
@@ -69,13 +121,14 @@ export async function getProbeSnapshot(options?: {
           return;
         }
 
-        // 2. Monitored HTTP service (probe endpoint)
+        // 2. Monitored HTTP service or Third-Party Status API
         const start = performance.now();
         try {
           const response = await customFetch(service.healthEndpoint, {
             signal: AbortSignal.timeout(3500),
             headers: {
               "User-Agent": "FSH-Lab-Status-Probe/1.0",
+              Accept: "application/json, text/html, */*",
             },
             cache: "no-store",
           });
@@ -88,10 +141,24 @@ export async function getProbeSnapshot(options?: {
               name: service.name,
               status: latencyMs > 800 ? "degraded_performance" : "operational",
               latencyMs,
-              probeType: "http_probe",
+              probeType: service.probeType ?? "http_probe",
               statusCode: response.status,
               timestamp: timestampIso,
             };
+
+            // Store real telemetry point
+            if (!probeTelemetryStore[service.id]) {
+              probeTelemetryStore[service.id] = [];
+            }
+            probeTelemetryStore[service.id]!.push({
+              timestamp: timeLabel,
+              latencyMs,
+            });
+            if (
+              probeTelemetryStore[service.id]!.length > MAX_TELEMETRY_POINTS
+            ) {
+              probeTelemetryStore[service.id]!.shift();
+            }
           } else {
             // Non-2xx response: 5xx is an outage, 4xx is degraded
             const status: ServiceStatus =
@@ -102,15 +169,13 @@ export async function getProbeSnapshot(options?: {
               name: service.name,
               status,
               latencyMs,
-              probeType: "http_probe",
+              probeType: service.probeType ?? "http_probe",
               statusCode: response.status,
               timestamp: timestampIso,
             };
           }
         } catch (err) {
           // Network failure, DNS error, connection refusal, or timeout.
-          // In production: must report as major_outage.
-          // In development: report major_outage or degraded with clear error indicator.
           const errorMsg =
             err instanceof Error ? err.message : "Connection failed";
           const isTimeout =
@@ -123,7 +188,7 @@ export async function getProbeSnapshot(options?: {
             name: service.name,
             status: isTimeout ? "degraded_performance" : "major_outage",
             latencyMs: 0,
-            probeType: "http_probe",
+            probeType: service.probeType ?? "http_probe",
             error: errorMsg,
             timestamp: timestampIso,
           };

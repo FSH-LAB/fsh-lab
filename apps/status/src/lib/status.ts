@@ -10,12 +10,13 @@ import type {
 } from "./types";
 
 /**
- * Deterministically generates 90 days of uptime history up to today.
- * Supports explicit incident overrides for specific dates.
+ * Generates 90 days of uptime history up to today.
+ * Every day without an incident is truthfully 100% operational.
+ * Recorded incidents accurately map to their respective days.
  */
 export function generate90DayHistory(
   seed: string,
-  targetUptime: number,
+  targetUptime: number = 100,
   incidentDays: Record<
     string,
     { status: ServiceStatus; count: number; desc: string; uptimePct?: number }
@@ -23,6 +24,8 @@ export function generate90DayHistory(
   now: Date = new Date(),
   currentStatus: ServiceStatus = "operational",
 ): DayUptime[] {
+  void seed;
+  void targetUptime;
   const days: DayUptime[] = [];
 
   for (let i = 89; i >= 0; i--) {
@@ -55,22 +58,11 @@ export function generate90DayHistory(
         description: override.desc,
       });
     } else {
-      // Deterministic slight fluctuation based on day string hash
-      let hash = 0;
-      const combined = `${seed}-${dateStr}`;
-      for (let j = 0; j < combined.length; j++) {
-        hash = (hash << 5) - hash + combined.charCodeAt(j);
-        hash |= 0;
-      }
-      const isPerfect = Math.abs(hash % 100) > 3 || targetUptime >= 99.99;
-      const uptimePercentage = isPerfect
-        ? 100
-        : Math.max(99.8, targetUptime - 0.05);
-
+      // Truthful 100% operational day with zero recorded incidents
       days.push({
         date: dateStr,
         status: "operational",
-        uptimePercentage,
+        uptimePercentage: 100.0,
         incidentCount: 0,
       });
     }
@@ -80,43 +72,43 @@ export function generate90DayHistory(
 }
 
 /**
- * Generates 24 hours of latency metric points.
+ * Calculates latency analytics (average and P95) from real telemetry metric points.
  */
 export function generate24hMetrics(
   baseLatencyMs: number,
-  varianceMs: number,
+  varianceMs = 0,
   now: Date = new Date(),
+  providedPoints?: ServiceMetricPoint[],
 ): {
   avgLatencyMs: number;
   p95LatencyMs: number;
   points: ServiceMetricPoint[];
 } {
-  const points: ServiceMetricPoint[] = [];
-  let total = 0;
-  const values: number[] = [];
+  void varianceMs;
+  void now;
+  const points: ServiceMetricPoint[] =
+    providedPoints && providedPoints.length > 0
+      ? providedPoints
+      : baseLatencyMs > 0
+        ? [{ timestamp: "Live", latencyMs: baseLatencyMs }]
+        : [];
 
-  for (let hour = 23; hour >= 0; hour--) {
-    const d = new Date(now);
-    d.setUTCHours(d.getUTCHours() - hour);
-    const timeLabel = `${String(d.getUTCHours()).padStart(2, "0")}:00`;
-
-    // Subtle sinusoidal variance + pseudo-random jitter
-    const hourFactor = Math.sin((d.getUTCHours() / 24) * Math.PI * 2);
-    const jitter = ((d.getUTCHours() * 17) % 7) - 3;
-    const latency = Math.max(
-      8,
-      Math.round(baseLatencyMs + hourFactor * varianceMs + jitter),
-    );
-
-    values.push(latency);
-    total += latency;
-    points.push({ timestamp: timeLabel, latencyMs: latency });
+  if (points.length === 0) {
+    return {
+      avgLatencyMs: baseLatencyMs,
+      p95LatencyMs: baseLatencyMs,
+      points: [],
+    };
   }
 
-  values.sort((a, b) => a - b);
-  const p95Index = Math.floor(values.length * 0.95);
-  const p95LatencyMs = values[p95Index] ?? baseLatencyMs;
-  const avgLatencyMs = Math.round(total / points.length);
+  const values = points.map((p) => p.latencyMs).sort((a, b) => a - b);
+  const total = values.reduce((sum, v) => sum + v, 0);
+  const avgLatencyMs = Math.round(total / values.length);
+  const p95Index = Math.min(
+    values.length - 1,
+    Math.floor(values.length * 0.95),
+  );
+  const p95LatencyMs = values[p95Index] ?? avgLatencyMs;
 
   return {
     avgLatencyMs,
@@ -186,33 +178,34 @@ export function calculateSystemStatus(
     (s) => s.status === "operational",
   ).length;
 
+  const unavailableCount = services.filter(
+    (s) => s.status === "major_outage" || s.status === "partial_outage",
+  ).length;
+  const degradedCount = services.filter(
+    (s) => s.status === "degraded_performance",
+  ).length;
+
   let headline = "All Systems Operational";
   let subheadline =
-    "All applications, platform infrastructure, and API endpoints are functioning normally.";
+    "All applications and API endpoints are up and responding normally.";
 
-  switch (worstStatus) {
-    case "major_outage":
-      headline = "Major System Outage";
-      subheadline =
-        "One or more core services are currently unavailable. The engineering team is actively investigating.";
-      break;
-    case "partial_outage":
-      headline = "Partial System Outage";
-      subheadline =
-        "Some systems are experiencing localized service disruptions while other services remain healthy.";
-      break;
-    case "degraded_performance":
-      headline = "Degraded System Performance";
-      subheadline =
-        "Services are operational but may be experiencing elevated response times or intermittent latency.";
-      break;
-    case "maintenance":
-      headline = "Scheduled Maintenance in Progress";
-      subheadline =
-        "Planned maintenance is underway. Systems are operating in maintenance mode.";
-      break;
-    default:
-      break;
+  if (unavailableCount > 0) {
+    headline = `${unavailableCount} of ${services.length} services currently unavailable`;
+    subheadline =
+      "One or more services are unreachable. Probes are actively monitoring for recovery.";
+  } else if (
+    worstStatus === "major_outage" ||
+    worstStatus === "partial_outage"
+  ) {
+    headline = `1 of ${services.length || 1} services currently unavailable`;
+    subheadline = "An active incident is affecting service availability.";
+  } else if (degradedCount > 0) {
+    headline = `${degradedCount} of ${services.length} services experiencing degraded performance`;
+    subheadline =
+      "Services are operational but experiencing elevated response times (>800ms).";
+  } else if (worstStatus === "maintenance") {
+    headline = "Scheduled Maintenance in Progress";
+    subheadline = "Planned maintenance is currently underway.";
   }
 
   return {
@@ -241,7 +234,7 @@ export function getStatusBadgeInfo(status: ServiceStatus | SystemStatusLevel): {
   switch (status) {
     case "operational":
       return {
-        label: "Operational",
+        label: "Up",
         dotColor: "bg-emerald-400",
         badgeBg: "bg-emerald-500/10",
         badgeText: "text-emerald-400",
@@ -250,7 +243,7 @@ export function getStatusBadgeInfo(status: ServiceStatus | SystemStatusLevel): {
       };
     case "degraded_performance":
       return {
-        label: "Degraded Performance",
+        label: "Degraded",
         dotColor: "bg-amber-400",
         badgeBg: "bg-amber-500/10",
         badgeText: "text-amber-400",
@@ -258,17 +251,9 @@ export function getStatusBadgeInfo(status: ServiceStatus | SystemStatusLevel): {
         barColor: "bg-amber-500",
       };
     case "partial_outage":
-      return {
-        label: "Partial Outage",
-        dotColor: "bg-orange-400",
-        badgeBg: "bg-orange-500/10",
-        badgeText: "text-orange-400",
-        borderColor: "border-orange-500/20",
-        barColor: "bg-orange-500",
-      };
     case "major_outage":
       return {
-        label: "Major Outage",
+        label: "Down",
         dotColor: "bg-rose-500",
         badgeBg: "bg-rose-500/10",
         badgeText: "text-rose-400",
@@ -284,5 +269,26 @@ export function getStatusBadgeInfo(status: ServiceStatus | SystemStatusLevel): {
         borderColor: "border-sky-500/20",
         barColor: "bg-sky-500",
       };
+  }
+}
+
+/**
+ * Maps internal system status level to standard Statuspage indicator vocabulary:
+ * "none", "minor", "major", "critical", or "maintenance".
+ */
+export function mapLevelToStandardIndicator(
+  level: SystemStatusLevel,
+): "none" | "minor" | "major" | "critical" | "maintenance" {
+  switch (level) {
+    case "operational":
+      return "none";
+    case "degraded_performance":
+      return "minor";
+    case "partial_outage":
+      return "major";
+    case "major_outage":
+      return "critical";
+    case "maintenance":
+      return "maintenance";
   }
 }

@@ -119,3 +119,12 @@ run "rejects_unknown_environment" {
 
   expect_failures = [var.environment]
 }
+
+run "uptime_monitoring_provisions_checks_and_dataset" {
+  command = plan
+
+  assert {
+    condition     = module.uptime_monitoring.dataset_id == "uptime_monitoring"
+    error_message = "Uptime monitoring must provision the BigQuery dataset."
+  }
+}

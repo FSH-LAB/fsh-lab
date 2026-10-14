@@ -29,20 +29,9 @@ test.describe("Status page", () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test("opens and closes subscribe dialog with keyboard", async ({ page }) => {
+  test("displays service response latency telemetry", async ({ page }) => {
     await page.goto("/");
-
-    const subscribeBtn = page.getByRole("button", {
-      name: /Subscribe to Updates/i,
-    });
-    await subscribeBtn.click();
-
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toBeVisible();
-
-    // Close via Escape key
-    await page.keyboard.press("Escape");
-    await expect(dialog).not.toBeVisible();
+    await expect(page.getByText("Response Latency Telemetry")).toBeVisible();
   });
 
   test("health check endpoint returns status ok", async ({ request }) => {

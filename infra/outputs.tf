@@ -14,3 +14,11 @@ output "github_variables" {
     GCP_DEPLOY_SERVICE_ACCOUNT = google_service_account.deployer.email
   }
 }
+
+output "uptime_monitoring" {
+  description = "Architecture B BigQuery dataset and uptime check configurations."
+  value = {
+    dataset_id       = module.uptime_monitoring.dataset_id
+    uptime_check_ids = module.uptime_monitoring.uptime_check_ids
+  }
+}

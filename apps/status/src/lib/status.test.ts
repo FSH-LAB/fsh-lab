@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateSystemStatus,
+  generate24hMetrics,
   generate90DayHistory,
   getStatusBadgeInfo,
 } from "./status";
@@ -96,7 +97,7 @@ describe("status logic", () => {
 
     const summary = calculateSystemStatus(mockServices, []);
     expect(summary.level).toBe("major_outage");
-    expect(summary.headline).toBe("Major System Outage");
+    expect(summary.headline).toBe("1 of 1 services currently unavailable");
   });
 
   it("escalates system status when an active critical incident exists", () => {
@@ -165,13 +166,37 @@ describe("status logic", () => {
     expect(summary.activeMaintenanceCount).toBe(1);
   });
 
+  it("produces authentic 100% uptime for clean days without synthetic fluctuations", () => {
+    const fixedDate = new Date("2026-10-14T10:00:00.000Z");
+    const history = generate90DayHistory("test-service", 100, {}, fixedDate);
+
+    // Verify all 90 days are 100.0% with 0 incidents
+    for (const day of history) {
+      expect(day.status).toBe("operational");
+      expect(day.uptimePercentage).toBe(100);
+      expect(day.incidentCount).toBe(0);
+    }
+  });
+
+  it("calculates latency metrics from real telemetry points correctly", () => {
+    const points = [
+      { timestamp: "10:00", latencyMs: 20 },
+      { timestamp: "11:00", latencyMs: 30 },
+      { timestamp: "12:00", latencyMs: 25 },
+      { timestamp: "13:00", latencyMs: 45 },
+    ];
+
+    const metrics = generate24hMetrics(20, 0, new Date(), points);
+    expect(metrics.avgLatencyMs).toBe(30);
+    expect(metrics.p95LatencyMs).toBe(45);
+    expect(metrics.points).toHaveLength(4);
+  });
+
   it("returns appropriate badge metadata for all status types", () => {
-    expect(getStatusBadgeInfo("operational").label).toBe("Operational");
-    expect(getStatusBadgeInfo("degraded_performance").label).toBe(
-      "Degraded Performance",
-    );
-    expect(getStatusBadgeInfo("partial_outage").label).toBe("Partial Outage");
-    expect(getStatusBadgeInfo("major_outage").label).toBe("Major Outage");
+    expect(getStatusBadgeInfo("operational").label).toBe("Up");
+    expect(getStatusBadgeInfo("degraded_performance").label).toBe("Degraded");
+    expect(getStatusBadgeInfo("partial_outage").label).toBe("Down");
+    expect(getStatusBadgeInfo("major_outage").label).toBe("Down");
     expect(getStatusBadgeInfo("maintenance").label).toBe("Maintenance");
   });
 });

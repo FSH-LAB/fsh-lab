@@ -1,4 +1,5 @@
 import { ACTIVE_INCIDENTS, PAST_INCIDENTS } from "@/lib/incidents";
+import { optionsResponse } from "@/lib/rest";
 
 function escapeXml(unsafe: string): string {
   return unsafe.replace(/[<>&'"]/g, (c) => {
@@ -19,7 +20,7 @@ function escapeXml(unsafe: string): string {
   });
 }
 
-export function GET() {
+export function GET(request: Request) {
   const incidents = [...ACTIVE_INCIDENTS, ...PAST_INCIDENTS];
   const now = new Date().toISOString();
 
@@ -43,12 +44,19 @@ export function GET() {
     })
     .join("");
 
+  const requestOrigin = request ? new URL(request.url).origin : "";
+  const statusUrl =
+    process.env.NEXT_PUBLIC_STATUS_URL ||
+    process.env.STATUS_URL ||
+    requestOrigin ||
+    "/";
+
   const atomXml = `<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>FSH Lab Status Updates</title>
   <subtitle>System status and incident updates for all FSH Lab applications</subtitle>
-  <link href="https://status.fsh-lab.dev" />
-  <link href="https://status.fsh-lab.dev/api/feed.xml" rel="self" />
+  <link href="${statusUrl}" />
+  <link href="${statusUrl.replace(/\/$/, "")}/api/v1/feed" rel="self" />
   <updated>${now}</updated>
   <id>urn:uuid:fsh-lab-status-feed</id>
   ${entriesXml}
@@ -57,7 +65,24 @@ export function GET() {
   return new Response(atomXml.trim(), {
     headers: {
       "Content-Type": "application/atom+xml; charset=utf-8",
-      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+      "Cache-Control":
+        "public, max-age=60, s-maxage=60, stale-while-revalidate=120",
+      "Access-Control-Allow-Origin": "*",
     },
   });
+}
+
+export function HEAD() {
+  return new Response(null, {
+    headers: {
+      "Content-Type": "application/atom+xml; charset=utf-8",
+      "Cache-Control":
+        "public, max-age=60, s-maxage=60, stale-while-revalidate=120",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
+}
+
+export function OPTIONS() {
+  return optionsResponse(["GET", "HEAD", "OPTIONS"]);
 }

@@ -42,12 +42,12 @@ test(
   "status JSON summary API returns valid structure",
   { timeout: 90_000 },
   async () => {
-    const data = JSON.parse(await request("/api/status.json"));
-    assert.equal(data.page.id, "fsh-lab-status");
-    assert.ok(Array.isArray(data.services));
+    const data = JSON.parse(await request("/api/v1/status"));
+    assert.ok(data.data);
     assert.match(
-      data.status.indicator,
+      data.data.indicator,
       /^(none|minor|major|critical|maintenance)$/,
     );
+    assert.ok(data.data.totalServicesCount >= 1);
   },
 );

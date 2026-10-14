@@ -4,33 +4,15 @@ import {
   SCHEDULED_MAINTENANCES,
 } from "@/lib/incidents";
 import { getProbeSnapshot } from "@/lib/probe";
-import { getAllMonitoredServices } from "@/lib/services";
-import { calculateSystemStatus } from "@/lib/status";
-import type { ServiceComponent, SystemStatusLevel } from "@/lib/types";
+import { optionsResponse, restJsonResponse } from "@/lib/rest";
+import { getAllMonitoredServices, getServiceEndpoints } from "@/lib/services";
+import {
+  calculateSystemStatus,
+  mapLevelToStandardIndicator,
+} from "@/lib/status";
+import type { ServiceComponent } from "@/lib/types";
 
-/**
- * Maps internal system status level to standard Statuspage indicator vocabulary:
- * "none", "minor", "major", "critical", or "maintenance".
- */
-export function mapLevelToStandardIndicator(
-  level: SystemStatusLevel,
-): "none" | "minor" | "major" | "critical" | "maintenance" {
-  switch (level) {
-    case "operational":
-      return "none";
-    case "degraded_performance":
-      return "minor";
-    case "partial_outage":
-      return "major";
-    case "major_outage":
-      return "critical";
-    case "maintenance":
-      return "maintenance";
-  }
-}
-
-export async function GET() {
-  // Read live/cached probe results so status.json reflects active outages
+export async function GET(request: Request) {
   const probeResults = await getProbeSnapshot();
 
   const overrides: Record<string, Partial<ServiceComponent>> = {};
@@ -49,13 +31,21 @@ export async function GET() {
     SCHEDULED_MAINTENANCES,
   );
 
+  // Quantize updated_at to the 10s HTTP cache window so ETag is stable across requests
+  const cacheBucketIso = new Date(
+    Math.floor(Date.now() / 10000) * 10000,
+  ).toISOString();
+
   const payload = {
     page: {
       id: "fsh-lab-status",
       name: "FSH Lab System Status",
-      url: "https://status.fsh-lab.dev",
+      url:
+        getServiceEndpoints("status").appUrl ||
+        process.env.NEXT_PUBLIC_STATUS_URL ||
+        new URL(request.url).origin,
       time_zone: "Europe/Oslo",
-      updated_at: summary.lastChecked,
+      updated_at: cacheBucketIso,
     },
     status: {
       indicator: mapLevelToStandardIndicator(summary.level),
@@ -69,7 +59,7 @@ export async function GET() {
       category: s.category,
       description: s.description,
       status: s.status,
-      probe_type: s.probeType ?? "platform_managed",
+      probe_type: s.probeType ?? "http_probe",
       uptime_90d: s.uptime90d,
       current_latency_ms: s.currentLatencyMs,
     })),
@@ -77,10 +67,13 @@ export async function GET() {
     scheduled_maintenances: SCHEDULED_MAINTENANCES,
   };
 
-  return Response.json(payload, {
-    headers: {
-      "Cache-Control": "public, s-maxage=10, stale-while-revalidate=30",
-      "Access-Control-Allow-Origin": "*",
-    },
-  });
+  return restJsonResponse(payload, request);
+}
+
+export async function HEAD(request: Request) {
+  return GET(request);
+}
+
+export async function OPTIONS() {
+  return optionsResponse(["GET", "HEAD", "OPTIONS"]);
 }

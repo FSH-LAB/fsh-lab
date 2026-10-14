@@ -12,7 +12,8 @@ export type SystemStatusLevel =
   | "major_outage"
   | "maintenance";
 
-export type ServiceCategory = "apps" | "platform" | "infra";
+export type ServiceCategory =
+  "internal" | "third_party" | "apps" | "platform" | "infra";
 
 export interface DayUptime {
   date: string; // ISO date YYYY-MM-DD
@@ -27,7 +28,7 @@ export interface ServiceMetricPoint {
   latencyMs: number;
 }
 
-export type ProbeType = "http_probe" | "platform_managed";
+export type ProbeType = "http_probe" | "platform_managed" | "third_party_api";
 
 export interface ProbeResult {
   id: string;
@@ -44,6 +45,7 @@ export interface ServiceComponent {
   id: string;
   name: string;
   category: ServiceCategory;
+  isThirdParty?: boolean;
   description: string;
   status: ServiceStatus;
   probeType?: ProbeType;

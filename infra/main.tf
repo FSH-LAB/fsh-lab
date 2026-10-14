@@ -3,9 +3,12 @@ locals {
 
   services = toset([
     "artifactregistry.googleapis.com",
+    "bigquery.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    "logging.googleapis.com",
+    "monitoring.googleapis.com",
     "run.googleapis.com",
     "storage.googleapis.com",
     "sts.googleapis.com",
@@ -18,6 +21,9 @@ locals {
     "roles/iam.securityReviewer",
     "roles/iam.workloadIdentityPoolViewer",
     "roles/artifactregistry.admin",
+    "roles/bigquery.admin",
+    "roles/logging.configWriter",
+    "roles/monitoring.admin",
     "roles/run.admin",
     "roles/serviceusage.serviceUsageAdmin",
   ])
@@ -163,6 +169,39 @@ module "status" {
   project_id     = google_project.environment.project_id
   region         = local.region
   deployer_email = google_service_account.deployer.email
+
+  depends_on = [google_project_service.required]
+}
+
+# ---------------------------------------------------------------------------
+# Architecture B: Uptime Checks & Long-Term Telemetry in BigQuery (>90 Days)
+# ---------------------------------------------------------------------------
+
+module "uptime_monitoring" {
+  source = "./modules/uptime-monitoring"
+
+  project_id  = google_project.environment.project_id
+  environment = var.environment
+  region      = local.region
+
+  monitored_services = {
+    helgefolelse = {
+      display_name = "Helgef\u00f8lelse"
+      host         = replace(replace(module.helgefolelse.service_url, "https://", ""), "/", "")
+      path         = "/api/health"
+      period       = "60s"
+      timeout      = "10s"
+    }
+    status = {
+      display_name = "Status"
+      host         = replace(replace(module.status.service_url, "https://", ""), "/", "")
+      path         = "/api/health"
+      period       = "60s"
+      timeout      = "10s"
+    }
+  }
+
+  status_runtime_service_account_email = module.status.runtime_service_account
 
   depends_on = [google_project_service.required]
 }

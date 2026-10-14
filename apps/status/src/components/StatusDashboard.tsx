@@ -7,24 +7,20 @@ import type {
   ProbeResult,
   ProbeType,
   ScheduledMaintenance,
-  ServiceCategory,
   ServiceComponent,
   ServiceStatus,
   SystemStatusSummary,
 } from "@/lib/types";
-import { FutureAppsCard } from "./FutureAppsCard";
 import { HeroBanner } from "./HeroBanner";
 import { IncidentHistory } from "./IncidentHistory";
 import { MaintenanceCard } from "./MaintenanceCard";
 import { ServiceCard } from "./ServiceCard";
 import { StatusHeader } from "./StatusHeader";
-import { SubscribeModal } from "./SubscribeModal";
 
 interface StatusDashboardProps {
   initialServices: ServiceComponent[];
   initialSummary: SystemStatusSummary;
   activeIncidents: Incident[];
-  pastIncidents: Incident[];
   scheduledMaintenances: ScheduledMaintenance[];
 }
 
@@ -32,16 +28,11 @@ export function StatusDashboard({
   initialServices,
   initialSummary,
   activeIncidents,
-  pastIncidents,
   scheduledMaintenances,
 }: StatusDashboardProps) {
   const [services, setServices] = useState<ServiceComponent[]>(initialServices);
   const [summary, setSummary] = useState<SystemStatusSummary>(initialSummary);
-  const [selectedCategory, setSelectedCategory] = useState<
-    ServiceCategory | "all"
-  >("all");
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [isSubscribeOpen, setIsSubscribeOpen] = useState(false);
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [isPending, startTransition] = useTransition();
 
@@ -56,13 +47,16 @@ export function StatusDashboard({
   // Perform live probe against registered endpoints
   const runLiveProbe = useCallback(async () => {
     try {
-      const res = await fetch("/api/probe", {
+      const res = await fetch("/api/v1/services/probe", {
         cache: "no-store",
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) return;
       const data = await res.json();
-      const results = data.results as Record<string, ProbeResult>;
+      const results = (data.data?.results ?? data.results) as Record<
+        string,
+        ProbeResult
+      >;
 
       startTransition(() => {
         setServices((prev) => {
@@ -101,31 +95,18 @@ export function StatusDashboard({
     return () => clearInterval(interval);
   }, [autoRefresh, runLiveProbe]);
 
-  const filteredServices =
-    selectedCategory === "all"
-      ? services
-      : services.filter((s) => s.category === selectedCategory);
-
-  const appsCount = services.filter((s) => s.category === "apps").length;
-  const platformCount = services.filter(
-    (s) => s.category === "platform",
-  ).length;
-  const infraCount = services.filter((s) => s.category === "infra").length;
-
   return (
     <div className="flex flex-col min-h-screen bg-[#090d16]">
       {/* Header */}
       <StatusHeader
         autoRefresh={autoRefresh}
         onToggleAutoRefresh={() => setAutoRefresh(!autoRefresh)}
-        onOpenSubscribe={() => setIsSubscribeOpen(true)}
       />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 flex-1 w-full space-y-10">
         {/* Hero status banner */}
         <HeroBanner
           summary={summary}
-          services={services}
           isProbing={isPending}
           onRefresh={runLiveProbe}
           secondsAgo={secondsAgo}
@@ -140,85 +121,36 @@ export function StatusDashboard({
           </div>
         )}
 
-        {/* Services Section */}
+        {/* Services & Applications Section */}
         <section className="space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div>
               <h2 className="text-xl font-bold text-white tracking-tight">
-                Services & Applications
+                Services &amp; Applications
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Current operational status and continuous 90-day uptime metrics
+                Real-time operational status and active response telemetry
               </p>
             </div>
-
-            {/* Filter Tabs */}
-            <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-lg border border-slate-800 text-xs font-medium">
-              <button
-                type="button"
-                onClick={() => setSelectedCategory("all")}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
-                  selectedCategory === "all"
-                    ? "bg-slate-800 text-white shadow-sm"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                All ({services.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedCategory("apps")}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
-                  selectedCategory === "apps"
-                    ? "bg-slate-800 text-white shadow-sm"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                Apps ({appsCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedCategory("platform")}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
-                  selectedCategory === "platform"
-                    ? "bg-slate-800 text-white shadow-sm"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                Platform ({platformCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedCategory("infra")}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
-                  selectedCategory === "infra"
-                    ? "bg-slate-800 text-white shadow-sm"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                Infra ({infraCount})
-              </button>
-            </div>
+            <span className="text-xs font-mono text-slate-400">
+              {services.length} Monitored Service
+              {services.length === 1 ? "" : "s"}
+            </span>
           </div>
 
-          {/* Service Cards List */}
           <div className="space-y-3">
-            {filteredServices.map((service) => (
+            {services.map((service) => (
               <ServiceCard key={service.id} service={service} />
             ))}
           </div>
         </section>
 
-        {/* Future Apps Guide Callout */}
-        <FutureAppsCard />
-
-        {/* Incident History Section */}
-        <section className="pt-4 border-t border-slate-800/80">
-          <IncidentHistory
-            activeIncidents={activeIncidents}
-            pastIncidents={pastIncidents}
-          />
-        </section>
+        {/* Active Incidents (only rendered during active incidents) */}
+        {activeIncidents.length > 0 && (
+          <section className="pt-4 border-t border-slate-800/80">
+            <IncidentHistory activeIncidents={activeIncidents} />
+          </section>
+        )}
       </main>
 
       {/* Footer */}
@@ -226,7 +158,7 @@ export function StatusDashboard({
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="font-semibold text-white tracking-tight">
-              FSH Lab Operations
+              FSH LAB
             </span>
             <span>•</span>
             <span className="font-mono text-[11px] text-slate-400">
@@ -236,20 +168,20 @@ export function StatusDashboard({
 
           <div className="flex items-center gap-4 text-xs">
             <a
-              href="/api/status.json"
+              href="/api/v1/status"
               target="_blank"
               rel="noreferrer"
               className="text-slate-400 hover:text-slate-200 hover:underline transition-colors font-mono"
             >
-              JSON Status API
+              REST Status API
             </a>
             <a
-              href="/api/feed.xml"
+              href="/api/v1/feed"
               target="_blank"
               rel="noreferrer"
               className="text-slate-400 hover:text-slate-200 hover:underline transition-colors font-mono"
             >
-              Atom / RSS
+              Atom Feed
             </a>
             <a
               href="https://github.com/FSH-LAB/fsh-lab"
@@ -262,12 +194,6 @@ export function StatusDashboard({
           </div>
         </div>
       </footer>
-
-      {/* Subscription Modal */}
-      <SubscribeModal
-        isOpen={isSubscribeOpen}
-        onClose={() => setIsSubscribeOpen(false)}
-      />
     </div>
   );
 }

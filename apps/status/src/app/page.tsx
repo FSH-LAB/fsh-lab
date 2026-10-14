@@ -1,9 +1,5 @@
 import { StatusDashboard } from "@/components/StatusDashboard";
-import {
-  ACTIVE_INCIDENTS,
-  PAST_INCIDENTS,
-  SCHEDULED_MAINTENANCES,
-} from "@/lib/incidents";
+import { ACTIVE_INCIDENTS, SCHEDULED_MAINTENANCES } from "@/lib/incidents";
 import { getAllMonitoredServices } from "@/lib/services";
 import { calculateSystemStatus } from "@/lib/status";
 
@@ -22,7 +18,6 @@ export default function StatusPage() {
       initialServices={initialServices}
       initialSummary={initialSummary}
       activeIncidents={ACTIVE_INCIDENTS}
-      pastIncidents={PAST_INCIDENTS}
       scheduledMaintenances={SCHEDULED_MAINTENANCES}
     />
   );

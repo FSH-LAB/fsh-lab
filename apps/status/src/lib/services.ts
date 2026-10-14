@@ -1,17 +1,24 @@
-import { generate24hMetrics, generate90DayHistory } from "./status";
-import type { ServiceCategory, ServiceComponent, ServiceStatus } from "./types";
+import { getServiceTelemetry } from "./probe";
+import { generate90DayHistory } from "./status";
+import type {
+  ProbeType,
+  ServiceCategory,
+  ServiceComponent,
+  ServiceStatus,
+} from "./types";
 
 /**
  * Configuration schema for an application or service monitored by the status page.
- * To register a future app, simply add an entry to MONITORED_SERVICES_CONFIG below!
  */
 export interface MonitoredServiceConfig {
   id: string;
   name: string;
   category: ServiceCategory;
+  isThirdParty?: boolean;
   description: string;
   appUrl?: string;
   healthEndpoint?: string;
+  probeType?: ProbeType;
   targetUptime: number; // e.g. 99.98
   baseLatencyMs: number;
   varianceMs: number;
@@ -23,99 +30,111 @@ export interface MonitoredServiceConfig {
 }
 
 /**
- * Central registry of all services across the FSH Lab ecosystem.
- * Supports current apps (Helgefølelse), core platform infrastructure, and future apps.
+ * Configurable endpoints for monitored applications.
+ *
+ * Dynamically resolved from environment variables:
+ * - HELGEFOLELSE: NEXT_PUBLIC_HELGEFOLELSE_URL / HELGEFOLELSE_URL, HELGEFOLELSE_HEALTH_URL
+ * - STATUS: NEXT_PUBLIC_STATUS_URL / STATUS_URL, STATUS_HEALTH_URL
  */
-export const MONITORED_SERVICES_CONFIG: MonitoredServiceConfig[] = [
-  // --- Applications ---
-  {
-    id: "helgefolelse",
-    name: "Helgefølelse",
-    category: "apps",
-    description:
-      "Public weekend feeling index, tide visualization, and real-time calculation engine.",
-    appUrl:
-      process.env.NEXT_PUBLIC_HELGEFOLELSE_URL || "https://helgefolelse.no",
-    healthEndpoint:
-      process.env.HELGEFOLELSE_HEALTH_URL ||
-      (process.env.NODE_ENV === "development"
-        ? "http://localhost:3000/api/health"
-        : "https://helgefolelse.no/api/health"),
-    targetUptime: 99.99,
-    baseLatencyMs: 24,
-    varianceMs: 8,
-    defaultStatus: "operational",
-    incidentOverrides: {
-      "2026-09-18": {
-        status: "degraded_performance",
-        count: 1,
-        desc: "Brief 12-minute latency spike during traffic burst (resolved).",
-        uptimePct: 99.2,
-      },
-    },
-  },
+export interface ServiceEndpointConfig {
+  appUrl?: string;
+  healthEndpoint?: string;
+}
 
-  // --- Platform & Compute ---
-  {
-    id: "cloud-run",
-    name: "Cloud Run Workload Runtime",
-    category: "platform",
-    description:
-      "Serverless container execution environment in Google Cloud (europe-north2).",
-    appUrl: "https://cloud.google.com/run",
-    targetUptime: 99.99,
-    baseLatencyMs: 14,
-    varianceMs: 4,
-    defaultStatus: "operational",
-  },
-  {
-    id: "edge-network",
-    name: "Edge Network & TLS Termination",
-    category: "platform",
-    description:
-      "Global edge routing, anycast ingress, automated HTTPS certificates, and DDoS mitigation.",
-    targetUptime: 99.995,
-    baseLatencyMs: 11,
-    varianceMs: 3,
-    defaultStatus: "operational",
-  },
+export function getServiceEndpoints(serviceId: string): ServiceEndpointConfig {
+  switch (serviceId) {
+    case "helgefolelse": {
+      const appUrl =
+        process.env.NEXT_PUBLIC_HELGEFOLELSE_URL ||
+        process.env.HELGEFOLELSE_URL ||
+        undefined;
+      const healthEndpoint =
+        process.env.HELGEFOLELSE_HEALTH_URL ||
+        (appUrl ? `${appUrl.replace(/\/$/, "")}/api/health` : undefined);
+      return { appUrl, healthEndpoint };
+    }
+    case "status": {
+      const appUrl =
+        process.env.NEXT_PUBLIC_STATUS_URL ||
+        process.env.STATUS_URL ||
+        undefined;
+      const healthEndpoint =
+        process.env.STATUS_HEALTH_URL ||
+        (appUrl ? `${appUrl.replace(/\/$/, "")}/api/health` : undefined);
+      return { appUrl, healthEndpoint };
+    }
+    default:
+      return {};
+  }
+}
 
-  // --- Infrastructure & Delivery ---
-  {
-    id: "artifact-registry",
-    name: "Artifact & Container Registry",
-    category: "infra",
-    description:
-      "Immutable OCI image storage, vulnerability scanning, and provenance attestation verification.",
-    targetUptime: 99.98,
-    baseLatencyMs: 38,
-    varianceMs: 12,
-    defaultStatus: "operational",
-  },
-  {
-    id: "github-cicd",
-    name: "Deployment Pipelines & Workload Identity",
-    category: "infra",
-    description:
-      "Automated CI verification, GitHub Actions deployment pipelines, and GCP OIDC federation.",
-    appUrl: "https://github.com",
-    targetUptime: 99.97,
-    baseLatencyMs: 45,
-    varianceMs: 15,
-    defaultStatus: "operational",
-    incidentOverrides: {
-      "2026-08-27": {
-        status: "degraded_performance",
-        count: 1,
-        desc: "Upstream OIDC latency during Workload Identity token federation (resolved).",
-        uptimePct: 99.6,
-      },
+export const SERVICE_ENDPOINTS: Record<string, ServiceEndpointConfig> =
+  new Proxy({} as Record<string, ServiceEndpointConfig>, {
+    get(_target, prop: string) {
+      return getServiceEndpoints(prop);
     },
-  },
-];
+  });
+
+const customRegisteredServices: MonitoredServiceConfig[] = [];
 
 /**
- * Builds the runtime ServiceComponent data structure with full 90-day history and 24h metrics.
+ * Returns dynamic configuration for all monitored applications.
+ * Dynamically resolves endpoints from environment variables on every call.
+ */
+export function getMonitoredServicesConfig(): MonitoredServiceConfig[] {
+  const base: MonitoredServiceConfig[] = [
+    {
+      id: "helgefolelse",
+      name: "Helgefølelse",
+      category: "internal",
+      isThirdParty: false,
+      description:
+        "Public weekend feeling index, tide visualization, and real-time calculation engine.",
+      ...getServiceEndpoints("helgefolelse"),
+      probeType: "http_probe",
+      targetUptime: 99.99,
+      baseLatencyMs: 0,
+      varianceMs: 0,
+      defaultStatus: "operational",
+    },
+  ];
+
+  for (const custom of customRegisteredServices) {
+    const idx = base.findIndex((s) => s.id === custom.id);
+    if (idx >= 0) {
+      base[idx] = custom;
+    } else {
+      base.push(custom);
+    }
+  }
+
+  return base;
+}
+
+/**
+ * Dynamic registry of all monitored services across the FSH Lab ecosystem.
+ * Directly backed by environment variables without hardcoded endpoints.
+ */
+export const MONITORED_SERVICES_CONFIG: MonitoredServiceConfig[] = new Proxy(
+  [] as MonitoredServiceConfig[],
+  {
+    get(_target, prop) {
+      const current = getMonitoredServicesConfig();
+      if (prop === "length") return current.length;
+      if (prop === Symbol.iterator)
+        return current[Symbol.iterator].bind(current);
+      if (typeof prop === "string" && !isNaN(Number(prop)))
+        return current[Number(prop)];
+      const val = (current as unknown as Record<string, unknown>)[
+        prop as string
+      ];
+      return typeof val === "function" ? val.bind(current) : val;
+    },
+  },
+);
+
+/**
+ * Builds the runtime ServiceComponent data structure with real history and telemetry.
  */
 export function buildMonitoredService(
   config: MonitoredServiceConfig,
@@ -124,6 +143,8 @@ export function buildMonitoredService(
 ): ServiceComponent {
   const currentStatus =
     overrides?.status ?? config.defaultStatus ?? "operational";
+  const currentLatency =
+    overrides?.currentLatencyMs ?? config.baseLatencyMs ?? 0;
 
   const days = generate90DayHistory(
     config.id,
@@ -133,28 +154,31 @@ export function buildMonitoredService(
     currentStatus,
   );
 
-  const metrics24h = generate24hMetrics(
-    config.baseLatencyMs,
-    config.varianceMs,
-    now,
-  );
+  // Retrieve real observed telemetry points
+  const realTelemetry = getServiceTelemetry(config.id, currentLatency);
 
   // Compute 90d uptime
   const uptimeSum = days.reduce((sum, d) => sum + d.uptimePercentage, 0);
-  const uptime90d = Number((uptimeSum / days.length).toFixed(3));
+  const uptime90d = Number((uptimeSum / (days.length || 1)).toFixed(3));
 
   return {
     id: config.id,
     name: config.name,
     category: config.category,
+    isThirdParty: config.isThirdParty ?? false,
     description: config.description,
-    status: overrides?.status ?? config.defaultStatus ?? "operational",
+    status: currentStatus,
+    probeType: config.probeType ?? "http_probe",
     appUrl: config.appUrl,
-    healthEndpoint: config.healthEndpoint,
+    healthEndpoint:
+      config.healthEndpoint ||
+      (config.appUrl
+        ? `${config.appUrl.replace(/\/$/, "")}/api/health`
+        : undefined),
     uptime90d,
-    currentLatencyMs: overrides?.currentLatencyMs ?? config.baseLatencyMs,
+    currentLatencyMs: currentLatency,
     days,
-    metrics24h,
+    metrics24h: realTelemetry,
     ...overrides,
   };
 }
@@ -175,11 +199,12 @@ export function getAllMonitoredServices(
  * Constructs an application configuration for monitoring.
  */
 export function createMonitoredAppConfig(
-  app: Omit<MonitoredServiceConfig, "category">,
+  app: Omit<MonitoredServiceConfig, "category" | "isThirdParty">,
 ): MonitoredServiceConfig {
   return {
     ...app,
-    category: "apps",
+    category: "internal",
+    isThirdParty: false,
   };
 }
 
@@ -187,12 +212,12 @@ export function createMonitoredAppConfig(
  * Registers an application configuration in the runtime monitored registry.
  */
 export function registerService(config: MonitoredServiceConfig): void {
-  const existingIdx = MONITORED_SERVICES_CONFIG.findIndex(
+  const existingIdx = customRegisteredServices.findIndex(
     (s) => s.id === config.id,
   );
   if (existingIdx >= 0) {
-    MONITORED_SERVICES_CONFIG[existingIdx] = config;
+    customRegisteredServices[existingIdx] = config;
   } else {
-    MONITORED_SERVICES_CONFIG.push(config);
+    customRegisteredServices.push(config);
   }
 }

@@ -1,10 +1,9 @@
 "use client";
 
-import type { ServiceComponent, SystemStatusSummary } from "@/lib/types";
+import type { SystemStatusSummary } from "@/lib/types";
 
 interface HeroBannerProps {
   summary: SystemStatusSummary;
-  services?: ServiceComponent[];
   isProbing: boolean;
   onRefresh: () => void;
   secondsAgo: number;
@@ -12,7 +11,6 @@ interface HeroBannerProps {
 
 export function HeroBanner({
   summary,
-  services = [],
   isProbing,
   onRefresh,
   secondsAgo,
@@ -37,33 +35,6 @@ export function HeroBanner({
       : isOutage
         ? "bg-rose-500"
         : "bg-sky-400";
-
-  // Dynamic trend computation from real weekly measurements
-  let weeklyTrendText = "Stable past 7 days";
-  let trendColor = "text-slate-400";
-  if (services.length > 0) {
-    const last7Days = services.flatMap((s) => s.days.slice(-7));
-    const prior7Days = services.flatMap((s) => s.days.slice(-14, -7));
-    if (last7Days.length > 0 && prior7Days.length > 0) {
-      const avgLast7 =
-        last7Days.reduce((acc, d) => acc + d.uptimePercentage, 0) /
-        last7Days.length;
-      const avgPrior7 =
-        prior7Days.reduce((acc, d) => acc + d.uptimePercentage, 0) /
-        prior7Days.length;
-      const diff = avgLast7 - avgPrior7;
-      if (Math.abs(diff) < 0.01) {
-        weeklyTrendText = "Consistent with prior week";
-        trendColor = "text-slate-400";
-      } else if (diff > 0) {
-        weeklyTrendText = `+${diff.toFixed(2)}% vs prior week`;
-        trendColor = "text-emerald-400";
-      } else {
-        weeklyTrendText = `${diff.toFixed(2)}% vs prior week`;
-        trendColor = "text-amber-400";
-      }
-    }
-  }
 
   const systemsSubtext =
     summary.operationalServicesCount === summary.totalServicesCount
@@ -102,7 +73,13 @@ export function HeroBanner({
               <span
                 className={`w-2 h-2 rounded-full ${glowColor} animate-pulse`}
               />
-              {isOperational ? "Operational" : summary.level.replace("_", " ")}
+              {isOperational
+                ? "Operational"
+                : isOutage
+                  ? "Down"
+                  : isDegraded
+                    ? "Degraded"
+                    : "Maintenance"}
             </span>
 
             <span className="text-xs text-slate-400 font-mono flex items-center gap-1.5">
@@ -144,19 +121,7 @@ export function HeroBanner({
         </div>
 
         {/* Quick Stats Panel */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:min-w-[340px]">
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between">
-            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">
-              90-Day Uptime
-            </span>
-            <span className="text-xl font-bold text-white font-mono mt-1">
-              {summary.overallUptime90d.toFixed(2)}%
-            </span>
-            <span className={`text-[10px] mt-1 ${trendColor}`}>
-              {weeklyTrendText}
-            </span>
-          </div>
-
+        <div className="grid grid-cols-2 gap-3 md:min-w-[260px]">
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between">
             <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">
               Systems
@@ -169,7 +134,7 @@ export function HeroBanner({
             </span>
           </div>
 
-          <div className="col-span-2 sm:col-span-1 bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between">
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between">
             <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">
               Incidents
             </span>
