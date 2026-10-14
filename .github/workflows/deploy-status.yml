@@ -1,0 +1,37 @@
+name: Release status
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/status/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - ".nvmrc"
+      - ".dockerignore"
+      - ".github/workflows/cd.yml"
+      - ".github/workflows/release-app.yml"
+      - ".github/workflows/deploy-status.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-status-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    permissions:
+      contents: write # Create release tags and check out code.
+      packages: write # Publish container images to GHCR.
+      attestations: write # Publish and verify build provenance.
+      id-token: write # Authenticate to GCP and sign provenance.
+    uses: ./.github/workflows/release-app.yml # zizmor: ignore[self-repository]
+    with:
+      app: status

@@ -155,6 +155,18 @@ module "helgefolelse" {
   depends_on = [google_project_service.required]
 }
 
+module "status" {
+  source = "./modules/cloud-run-app"
+
+  app            = "status"
+  display_name   = "Status"
+  project_id     = google_project.environment.project_id
+  region         = local.region
+  deployer_email = google_service_account.deployer.email
+
+  depends_on = [google_project_service.required]
+}
+
 # Adopts the resources that were declared inline before the module existed.
 # Safe to delete once every environment has applied them.
 moved {

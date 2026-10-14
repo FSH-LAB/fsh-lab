@@ -225,6 +225,55 @@ importers:
         specifier: ^5.0.3
         version: 5.0.3(@types/node@26.6.4)(vite@8.3.1(@types/node@26.6.4)(jiti@2.7.0))
 
+  apps/status:
+    dependencies:
+      next:
+        specifier: 16.3.8
+        version: 16.3.8(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.64.0)(@types/node@26.6.4)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: 19.3.0
+        version: 19.3.0(react@19.3.0)
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.64.0
+        version: 1.64.0
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@tailwindcss/postcss':
+        specifier: ^4
+        version: 4.3.3
+      '@types/node':
+        specifier: ^26.6.4
+        version: 26.6.4
+      '@types/react':
+        specifier: ^19
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19
+        version: 19.3.0(@types/react@19.3.0)
+      '@typescript/native':
+        specifier: npm:typescript@^7.0.2
+        version: typescript@7.0.2
+      eslint:
+        specifier: ^9.7.0
+        version: 9.39.5(jiti@2.7.0)(supports-color@7.2.0)
+      tailwindcss:
+        specifier: ^4
+        version: 4.3.3
+      typescript:
+        specifier: npm:@typescript/typescript6@^6.0.2
+        version: '@typescript/typescript6@6.0.2'
+      vitest:
+        specifier: ^5.0.3
+        version: 5.0.3(@types/node@26.6.4)(vite@8.3.1(@types/node@26.6.4)(jiti@2.7.0))
+
   packages/eslint-config:
     dependencies:
       eslint:
