@@ -79,8 +79,10 @@ jobs:
           annotations: true
           config: .github/zizmor.yml
       - name: Lint, typecheck, test and build
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             pnpm turbo run lint typecheck test build --affected
           else
             pnpm turbo run lint typecheck test build
