@@ -105,7 +105,7 @@ run "trust_is_scoped_to_environment" {
   }
 
   assert {
-    condition     = google_iam_workload_identity_pool_provider.github.attribute_condition == "(assertion.repository == 'FSH-LAB/fsh-lab' || assertion.repository == 'FSH-LAB/helgefolelse') && assertion.ref == 'refs/heads/main' && assertion.environment == 'production'"
+    condition     = google_iam_workload_identity_pool_provider.github.attribute_condition == "assertion.repository == 'FSH-LAB/fsh-lab' && assertion.ref == 'refs/heads/main' && assertion.environment == 'production'"
     error_message = "OIDC trust must require the repository, main and the matching environment."
   }
 }

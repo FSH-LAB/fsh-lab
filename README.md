@@ -71,7 +71,7 @@ SMOKE_URL=http://localhost:8080 SHA="$(git rev-parse HEAD)" pnpm --filter helgef
      }
    }
    ```
-3. **Provision Infrastructure**:
+3. **Declare Infrastructure**:
    In `infra/main.tf`, instantiate the reusable Cloud Run module:
    ```hcl
    module "<app-name>" {
@@ -83,8 +83,22 @@ SMOKE_URL=http://localhost:8080 SHA="$(git rev-parse HEAD)" pnpm --filter helgef
      deployer_email = google_service_account.deployer.email
    }
    ```
-4. **Wire Deployment Pipeline**:
-   Add `.github/workflows/deploy-<app-name>.yml` triggering on `apps/<app-name>/**` and invoking `.github/workflows/release-app.yml` with `app: <app-name>`.
+4. **Privileged Infrastructure Rollout (Operator Pre-Apply)**:
+   Because the automated CI deployer intentionally adheres to least privilege and cannot administer service accounts or IAM policies ([`infra/main.tf`](infra/main.tf) and [`infra/README.md`](infra/README.md)), an operator must run `terraform apply` with operator credentials for each environment (`dev`, `production`) before merging:
+   ```sh
+   ENV=dev # and production
+   PROJECT=$(sed -n 's/^project_id *= *"\(.*\)"/\1/p' "infra/environments/$ENV.tfvars")
+   export TF_DATA_DIR="$PWD/infra/.terraform/$ENV"
+
+   terraform -chdir=infra init -reconfigure \
+     -backend-config="bucket=$PROJECT-terraform-state" \
+     -backend-config="prefix=helgefolelse/$ENV"
+   terraform -chdir=infra plan \
+     -var-file="environments/$ENV.tfvars" -out="$ENV.tfplan"
+   terraform -chdir=infra apply "$ENV.tfplan"
+   ```
+5. **Wire Deployment Pipeline**:
+   Add `.github/workflows/deploy-<app-name>.yml` triggering on `apps/<app-name>/**`, shared packages, and root build configuration (`pnpm-lock.yaml`, etc.), calling `.github/workflows/release-app.yml` with `app: <app-name>`.
 
 ## Architecture & CI/CD
 
