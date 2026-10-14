@@ -23,6 +23,12 @@ locals {
   ])
 }
 
+# ---------------------------------------------------------------------------
+# Platform: shared by every app in the environment.
+# Several identifiers below still say "helgefolelse" because GCP project IDs,
+# service account IDs and the state prefix cannot be renamed in place.
+# ---------------------------------------------------------------------------
+
 resource "google_project" "environment" {
   project_id          = var.project_id
   name                = var.project_name
@@ -65,47 +71,6 @@ resource "google_storage_bucket" "state" {
   }
 }
 
-resource "google_artifact_registry_repository" "web" {
-  project       = google_project.environment.project_id
-  location      = local.region
-  repository_id = "helgefolelse"
-  format        = "DOCKER"
-  description   = "Docker images for the Helgef\u00f8lelse web app."
-
-  cleanup_policy_dry_run = true
-
-  docker_config {
-    immutable_tags = false
-  }
-
-  cleanup_policies {
-    id     = "delete-web-after-30d"
-    action = "DELETE"
-
-    condition {
-      tag_state             = "ANY"
-      older_than            = "2592000s"
-      package_name_prefixes = ["web"]
-    }
-  }
-
-  cleanup_policies {
-    id     = "keep-web-latest-5"
-    action = "KEEP"
-
-    most_recent_versions {
-      keep_count            = 5
-      package_name_prefixes = ["web"]
-    }
-  }
-
-  depends_on = [google_project_service.required]
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
 resource "google_service_account" "deployer" {
   project      = google_project.environment.project_id
   account_id   = "helgefolelse-deployer"
@@ -115,55 +80,6 @@ resource "google_service_account" "deployer" {
 
   lifecycle {
     prevent_destroy = true
-  }
-}
-
-resource "google_service_account" "runtime" {
-  project      = google_project.environment.project_id
-  account_id   = "helgefolelse-runtime"
-  display_name = "Helgefolelse Cloud Run runtime"
-
-  depends_on = [google_project_service.required]
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-resource "google_cloud_run_v2_service" "web" {
-  project              = google_project.environment.project_id
-  name                 = "helgefolelse-web"
-  location             = local.region
-  deletion_protection  = true
-  ingress              = "INGRESS_TRAFFIC_ALL"
-  invoker_iam_disabled = true
-
-  template {
-    service_account = google_service_account.runtime.email
-
-    containers {
-      image = "us-docker.pkg.dev/cloudrun/container/hello"
-
-      ports {
-        container_port = 8080
-      }
-    }
-  }
-
-  depends_on = [google_project_service.required]
-
-  lifecycle {
-    prevent_destroy = true
-    # Releases (image, GIT_SHA, revisions, traffic) are owned by the deploy workflow.
-    ignore_changes = [
-      template[0].containers[0].image,
-      template[0].containers[0].env,
-      template[0].containers[0].name,
-      template[0].revision,
-      traffic,
-      client,
-      client_version,
-    ]
   }
 }
 
@@ -186,12 +102,6 @@ resource "google_storage_bucket_iam_member" "deployer_state" {
   }
 }
 
-resource "google_service_account_iam_member" "runtime_user" {
-  service_account_id = google_service_account.runtime.name
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${google_service_account.deployer.email}"
-}
-
 resource "google_iam_workload_identity_pool" "github" {
   project                   = google_project.environment.number
   workload_identity_pool_id = "github-actions"
@@ -209,14 +119,14 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = "github"
   # GCP caps provider display names at 32 characters.
-  display_name = "Helgefolelse ${var.environment == "production" ? "prod" : var.environment} deployments"
+  display_name = "FSH-LAB ${var.environment == "production" ? "prod" : var.environment} deployments"
   attribute_mapping = {
     "google.subject"        = "assertion.sub"
     "attribute.repository"  = "assertion.repository"
     "attribute.ref"         = "assertion.ref"
     "attribute.environment" = "assertion.environment"
   }
-  attribute_condition = "assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/main' && assertion.environment == '${var.environment}'"
+  attribute_condition = "(assertion.repository == '${var.github_repository}' || assertion.repository == 'FSH-LAB/helgefolelse') && assertion.ref == 'refs/heads/main' && assertion.environment == '${var.environment}'"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -227,4 +137,42 @@ resource "google_service_account_iam_member" "github_deployer" {
   service_account_id = google_service_account.deployer.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.environment/${var.environment}"
+}
+
+# ---------------------------------------------------------------------------
+# Apps: one module per deployable app under apps/. See infra/README.md.
+# ---------------------------------------------------------------------------
+
+module "helgefolelse" {
+  source = "./modules/cloud-run-app"
+
+  app            = "helgefolelse"
+  display_name   = "Helgef\u00f8lelse"
+  project_id     = google_project.environment.project_id
+  region         = local.region
+  deployer_email = google_service_account.deployer.email
+
+  depends_on = [google_project_service.required]
+}
+
+# Adopts the resources that were declared inline before the module existed.
+# Safe to delete once every environment has applied them.
+moved {
+  from = google_artifact_registry_repository.web
+  to   = module.helgefolelse.google_artifact_registry_repository.this
+}
+
+moved {
+  from = google_service_account.runtime
+  to   = module.helgefolelse.google_service_account.runtime
+}
+
+moved {
+  from = google_cloud_run_v2_service.web
+  to   = module.helgefolelse.google_cloud_run_v2_service.this
+}
+
+moved {
+  from = google_service_account_iam_member.runtime_user
+  to   = module.helgefolelse.google_service_account_iam_member.deployer_acts_as_runtime
 }

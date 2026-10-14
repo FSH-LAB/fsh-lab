@@ -1,0 +1,31 @@
+name: Release helgefolelse
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/helgefolelse/**"
+      - "packages/**"
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/release-app.yml"
+      - ".github/workflows/deploy-helgefolelse.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-helgefolelse-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    permissions:
+      contents: write
+      packages: write
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/release-app.yml # zizmor: ignore[self-repository]
+    with:
+      app: helgefolelse

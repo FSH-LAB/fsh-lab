@@ -1,5 +1,8 @@
-output "service_url" {
-  value = google_cloud_run_v2_service.web.uri
+output "service_urls" {
+  description = "Cloud Run URL per app."
+  value = {
+    helgefolelse = module.helgefolelse.service_url
+  }
 }
 
 output "github_variables" {

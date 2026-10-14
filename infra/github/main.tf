@@ -18,8 +18,14 @@ provider "github" {
   owner = "FSH-LAB"
 }
 
+variable "repository" {
+  description = "GitHub repository name"
+  type        = string
+  default     = "fsh-lab"
+}
+
 locals {
-  repository = "helgefolelse"
+  repository = var.repository
   reviewers  = [38140980] # FredrikSundt-Hansen
 
   environments = {
