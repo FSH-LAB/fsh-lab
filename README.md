@@ -103,6 +103,6 @@ SMOKE_URL=http://localhost:8080 SHA="$(git rev-parse HEAD)" pnpm --filter helgef
 ## Architecture & CI/CD
 
 - **CI (`.github/workflows/ci.yml`)**: Runs on pull requests and pushes to `main`. Leverages Turborepo affected filtering (`--affected`) on pull requests to only test changed packages and their dependents, keeping verification fast as the monorepo expands.
-- **CD (`.github/workflows/deploy-*.yml` -> `release-app.yml`)**: App-scoped pipelines build, scan with Trivy, attest provenance, and deploy container images to Google Cloud Run across `dev` and `production` environments.
+- **CD (`.github/workflows/deploy-*.yml` -> `release-app.yml` -> `cd.yml`)**: App-scoped pipelines build, scan with Trivy, attest provenance, and deploy container images to Google Cloud Run across `dev` and `production` environments.
 - **Candidate Verification**: Deployments roll out to a tagged `--no-traffic` candidate revision first, run automated smoke tests against the candidate URL, and only promote traffic to 100% upon success.
 - **Infrastructure (`infra/`)**: Reusable Terraform modules (`infra/modules/cloud-run-app`) deployed via `.github/workflows/infra.yml`. Workload Identity Federation (WIF) eliminates long-lived service account keys.

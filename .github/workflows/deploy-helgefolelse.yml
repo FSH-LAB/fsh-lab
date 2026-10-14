@@ -12,7 +12,7 @@ on:
       - "turbo.json"
       - ".nvmrc"
       - ".dockerignore"
-      - ".github/workflows/deploy.yml"
+      - ".github/workflows/cd.yml"
       - ".github/workflows/release-app.yml"
       - ".github/workflows/deploy-helgefolelse.yml"
   workflow_dispatch:
