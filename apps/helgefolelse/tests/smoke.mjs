@@ -34,5 +34,8 @@ test(
 );
 
 test("home page renders", { timeout: 90_000 }, async () => {
-  assert.match(await request("/"), /<title>helgef\u00f8lelse — levende tidevann gjennom arbeidsuken<\/title>/);
+  assert.match(
+    await request("/"),
+    /<title>helgef\u00f8lelse — levende tidevann gjennom arbeidsuken<\/title>/,
+  );
 });

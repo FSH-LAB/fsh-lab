@@ -23,7 +23,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="nb" className={`${bricolage.variable} ${jetbrainsMono.variable} dark`}>
+    <html
+      lang="nb"
+      className={`${bricolage.variable} ${jetbrainsMono.variable} dark`}
+    >
       <body>{children}</body>
     </html>
   );

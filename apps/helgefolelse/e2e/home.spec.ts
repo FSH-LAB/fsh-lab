@@ -15,7 +15,9 @@ test.describe("Home page", () => {
     await expect(page).toHaveTitle(/helgefølelse/);
 
     // Header wordmark
-    await expect(page.getByRole("heading", { name: "helgefølelse" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "helgefølelse" }),
+    ).toBeVisible();
 
     // The tide visualization scene & SVG
     const scene = page.locator("#app");

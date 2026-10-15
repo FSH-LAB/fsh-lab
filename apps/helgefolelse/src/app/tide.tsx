@@ -19,49 +19,182 @@ export default function Tide({ initial }: { initial: Reading }) {
      * 1. CORE HELGEFØLELSE DOMAIN LOGIC (Ported & enhanced from apps/helgefolelse/src/lib)
      */
     const TIME_ZONE = "Europe/Oslo";
-    const RISE_END = 4 * 24 + 16;   // Friday 16:00 (112 hours into the week)
-    const PLATEAU_END = 6 * 24;     // Sunday 00:00 (144 hours into the week)
-    const WEEK = 7 * 24;            // 168 hours
+    const RISE_END = 4 * 24 + 16; // Friday 16:00 (112 hours into the week)
+    const PLATEAU_END = 6 * 24; // Sunday 00:00 (144 hours into the week)
+    const WEEK = 7 * 24; // 168 hours
     const RISE_SHAPE = 3.0;
     const FALL_SHAPE = 4.5;
 
     const BAND_ORDER = ["ankle", "knee", "waist", "chest", "over"];
-    const BANDS: Record<string, {label: string, range: string, desc: string}> = {
-      ankle: { label: "Ankeldypt", range: "0–20%", desc: "Vannet skvulper så vidt rundt anklene" },
-      knee:  { label: "Knedypt",   range: "20–40%", desc: "Du kjenner draget i strømmen" },
-      waist: { label: "Midjedypt", range: "40–60%", desc: "Halvveis uti — arbeidsuken mister fotfestet" },
-      chest: { label: "Brystdypt", range: "60–80%", desc: "Bølgene løfter deg opp fra bunnen" },
-      over:  { label: "Over hodet", range: "80–100%", desc: "Helt oppslukt av helgefølelsen" }
+    const BANDS: Record<
+      string,
+      { label: string; range: string; desc: string }
+    > = {
+      ankle: {
+        label: "Ankeldypt",
+        range: "0–20%",
+        desc: "Vannet skvulper så vidt rundt anklene",
+      },
+      knee: {
+        label: "Knedypt",
+        range: "20–40%",
+        desc: "Du kjenner draget i strømmen",
+      },
+      waist: {
+        label: "Midjedypt",
+        range: "40–60%",
+        desc: "Halvveis uti — arbeidsuken mister fotfestet",
+      },
+      chest: {
+        label: "Brystdypt",
+        range: "60–80%",
+        desc: "Bølgene løfter deg opp fra bunnen",
+      },
+      over: {
+        label: "Over hodet",
+        range: "80–100%",
+        desc: "Helt oppslukt av helgefølelsen",
+      },
     };
 
-    const WEEKDAY_NAMES_NO = ["", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søndag"];
-    const WEEKDAY_SHORT_NO = ["", "Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"];
-    const WEEKDAY_INDEX: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+    const WEEKDAY_NAMES_NO = [
+      "",
+      "Mandag",
+      "Tirsdag",
+      "Onsdag",
+      "Torsdag",
+      "Fredag",
+      "Lørdag",
+      "Søndag",
+    ];
+    const WEEKDAY_SHORT_NO = [
+      "",
+      "Man",
+      "Tir",
+      "Ons",
+      "Tor",
+      "Fre",
+      "Lør",
+      "Søn",
+    ];
+    const WEEKDAY_INDEX: Record<string, number> = {
+      Mon: 1,
+      Tue: 2,
+      Wed: 3,
+      Thu: 4,
+      Fri: 5,
+      Sat: 6,
+      Sun: 7,
+    };
 
     const FLOODING_STOPS = [
-      { at: 0,   air: "#0d181c", surface: "#0a3a40", mid: "#082b30", deep: "#051b1f" },
-      { at: 35,  air: "#132329", surface: "#0b5f63", mid: "#094448", deep: "#07282c" },
-      { at: 70,  air: "#193037", surface: "#109089", mid: "#0c6865", deep: "#093e40" },
-      { at: 100, air: "#214048", surface: "#17a39b", mid: "#0f7a74", deep: "#0a4f4d" }
+      {
+        at: 0,
+        air: "#0d181c",
+        surface: "#0a3a40",
+        mid: "#082b30",
+        deep: "#051b1f",
+      },
+      {
+        at: 35,
+        air: "#132329",
+        surface: "#0b5f63",
+        mid: "#094448",
+        deep: "#07282c",
+      },
+      {
+        at: 70,
+        air: "#193037",
+        surface: "#109089",
+        mid: "#0c6865",
+        deep: "#093e40",
+      },
+      {
+        at: 100,
+        air: "#214048",
+        surface: "#17a39b",
+        mid: "#0f7a74",
+        deep: "#0a4f4d",
+      },
     ];
 
     const EBBING_STOPS = [
-      { at: 0,   air: "#070d14", surface: "#071a26", mid: "#05131c", deep: "#03080e" },
-      { at: 30,  air: "#0c1722", surface: "#0a3145", mid: "#082433", deep: "#051721" },
-      { at: 65,  air: "#142533", surface: "#0e5e6b", mid: "#0a444f", deep: "#072933" },
-      { at: 100, air: "#214048", surface: "#17a39b", mid: "#0f7a74", deep: "#0a4f4d" }
+      {
+        at: 0,
+        air: "#070d14",
+        surface: "#071a26",
+        mid: "#05131c",
+        deep: "#03080e",
+      },
+      {
+        at: 30,
+        air: "#0c1722",
+        surface: "#0a3145",
+        mid: "#082433",
+        deep: "#051721",
+      },
+      {
+        at: 65,
+        air: "#142533",
+        surface: "#0e5e6b",
+        mid: "#0a444f",
+        deep: "#072933",
+      },
+      {
+        at: 100,
+        air: "#214048",
+        surface: "#17a39b",
+        mid: "#0f7a74",
+        deep: "#0a4f4d",
+      },
     ];
 
     const HYGGE_STOPS = [
-      { at: 0,   air: "#18100c", surface: "#3b2110", mid: "#2a160a", deep: "#140a04" },
-      { at: 50,  air: "#24170f", surface: "#783f12", mid: "#542a0c", deep: "#291305" },
-      { at: 100, air: "#2e1e12", surface: "#b45309", mid: "#853a09", deep: "#451a03" }
+      {
+        at: 0,
+        air: "#18100c",
+        surface: "#3b2110",
+        mid: "#2a160a",
+        deep: "#140a04",
+      },
+      {
+        at: 50,
+        air: "#24170f",
+        surface: "#783f12",
+        mid: "#542a0c",
+        deep: "#291305",
+      },
+      {
+        at: 100,
+        air: "#2e1e12",
+        surface: "#b45309",
+        mid: "#853a09",
+        deep: "#451a03",
+      },
     ];
 
     const SONAR_STOPS = [
-      { at: 0,   air: "#030914", surface: "#06283d", mid: "#041c2c", deep: "#020d17" },
-      { at: 50,  air: "#051329", surface: "#084c61", mid: "#063445", deep: "#031824" },
-      { at: 100, air: "#071f3d", surface: "#0284c7", mid: "#035388", deep: "#042440" }
+      {
+        at: 0,
+        air: "#030914",
+        surface: "#06283d",
+        mid: "#041c2c",
+        deep: "#020d17",
+      },
+      {
+        at: 50,
+        air: "#051329",
+        surface: "#084c61",
+        mid: "#063445",
+        deep: "#031824",
+      },
+      {
+        at: 100,
+        air: "#071f3d",
+        surface: "#0284c7",
+        mid: "#035388",
+        deep: "#042440",
+      },
     ];
 
     let activeVisualTheme = "nordic-sea";
@@ -73,10 +206,42 @@ export default function Tide({ initial }: { initial: Reading }) {
 
     // Company & Department Fleet State
     const departments = [
-      { id: "tech",    name: "Utvikling & Plattform", members: 16, offset: -6,  color: "#38bdf8", xNorm: 0.24, status: "Sprint-innspurt" },
-      { id: "design",  name: "Design & Produkt",      members: 9,  offset: +8,  color: "#c084fc", xNorm: 0.44, status: "Prototype ferdig!" },
-      { id: "sales",   name: "Salg & Marked",         members: 11, offset: +14, color: "#fbbf24", xNorm: 0.64, status: "Fredagsstemning" },
-      { id: "ops",     name: "Kundeservice & Drift",  members: 6,  offset: -2,  color: "#34d399", xNorm: 0.78, status: "Stabil vakt" }
+      {
+        id: "tech",
+        name: "Utvikling & Plattform",
+        members: 16,
+        offset: -6,
+        color: "#38bdf8",
+        xNorm: 0.24,
+        status: "Sprint-innspurt",
+      },
+      {
+        id: "design",
+        name: "Design & Produkt",
+        members: 9,
+        offset: +8,
+        color: "#c084fc",
+        xNorm: 0.44,
+        status: "Prototype ferdig!",
+      },
+      {
+        id: "sales",
+        name: "Salg & Marked",
+        members: 11,
+        offset: +14,
+        color: "#fbbf24",
+        xNorm: 0.64,
+        status: "Fredagsstemning",
+      },
+      {
+        id: "ops",
+        name: "Kundeservice & Drift",
+        members: 6,
+        offset: -2,
+        color: "#34d399",
+        xNorm: 0.78,
+        status: "Stabil vakt",
+      },
     ];
     let selectedDeptId: string | null = null;
 
@@ -86,7 +251,7 @@ export default function Tide({ initial }: { initial: Reading }) {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
-      hour12: false
+      hour12: false,
     });
 
     function ramp(p: number, shape: number) {
@@ -102,7 +267,11 @@ export default function Tide({ initial }: { initial: Reading }) {
     }
 
     // Evaluate helgefølelse at any given hours-into-week (0..168), with optional custom Friday hour & boost
-    function evaluateAtHours(hoursIntoWeek: number, customRiseEnd = RISE_END, boostPct = 0) {
+    function evaluateAtHours(
+      hoursIntoWeek: number,
+      customRiseEnd = RISE_END,
+      boostPct = 0,
+    ) {
       const h = ((hoursIntoWeek % WEEK) + WEEK) % WEEK;
       let value = 0;
       let trend = "rising";
@@ -140,7 +309,7 @@ export default function Tide({ initial }: { initial: Reading }) {
       const dayHours = h % 24;
       const hour = Math.floor(dayHours);
       const minute = Math.floor((dayHours - hour) * 60);
-      const second = Math.floor((((dayHours - hour) * 60) - minute) * 60);
+      const second = Math.floor(((dayHours - hour) * 60 - minute) * 60);
 
       return {
         hours: h,
@@ -151,13 +320,14 @@ export default function Tide({ initial }: { initial: Reading }) {
         weekday,
         hour,
         minute,
-        second
+        second,
       };
     }
 
     function getLiveOsloHours(at = new Date()) {
       const parts = osloFormatter.formatToParts(at);
-      const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
+      const get = (type: string) =>
+        parts.find((p) => p.type === type)?.value ?? "0";
       const weekday = WEEKDAY_INDEX[get("weekday")] ?? 1;
       const hour = Number(get("hour")) % 24;
       const minute = Number(get("minute"));
@@ -204,7 +374,7 @@ export default function Tide({ initial }: { initial: Reading }) {
         air: mixHex(lower.air, upper.air, t),
         surface: mixHex(lower.surface, upper.surface, t),
         mid: mixHex(lower.mid, upper.mid, t),
-        deep: mixHex(lower.deep, upper.deep, t)
+        deep: mixHex(lower.deep, upper.deep, t),
       };
     }
 
@@ -213,13 +383,13 @@ export default function Tide({ initial }: { initial: Reading }) {
 
     const FRONT_WAVES = [
       { amplitude: 0.014, periods: 1.35, cyclesPerSecond: 0.055 },
-      { amplitude: 0.008, periods: 2.40, cyclesPerSecond: -0.085 },
-      { amplitude: 0.003, periods: 4.10, cyclesPerSecond: 0.140 }
+      { amplitude: 0.008, periods: 2.4, cyclesPerSecond: -0.085 },
+      { amplitude: 0.003, periods: 4.1, cyclesPerSecond: 0.14 },
     ];
 
     const BACK_WAVES = [
       { amplitude: 0.016, periods: 1.15, cyclesPerSecond: -0.045 },
-      { amplitude: 0.009, periods: 2.10, cyclesPerSecond: 0.070 }
+      { amplitude: 0.009, periods: 2.1, cyclesPerSecond: 0.07 },
     ];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -228,7 +398,7 @@ export default function Tide({ initial }: { initial: Reading }) {
       ripples.push({
         xNorm,
         strength: Math.max(-45, Math.min(45, strength)),
-        born: performance.now()
+        born: performance.now(),
       });
       if (ripples.length > 18) ripples.shift();
     }
@@ -241,7 +411,7 @@ export default function Tide({ initial }: { initial: Reading }) {
       r: 1.2 + Math.random() * 2.8,
       speedY: 0.012 + Math.random() * 0.028,
       driftX: (Math.random() - 0.5) * 0.02,
-      phase: Math.random() * TAU
+      phase: Math.random() * TAU,
     }));
 
     // State
@@ -274,8 +444,10 @@ export default function Tide({ initial }: { initial: Reading }) {
     const particlesGroup = root.querySelector("#underwater-particles");
 
     function initFleetBuoys() {
-      if(fleetBuoysGroup) {
-        fleetBuoysGroup.innerHTML = departments.map((d) => `
+      if (fleetBuoysGroup) {
+        fleetBuoysGroup.innerHTML = departments
+          .map(
+            (d) => `
           <g id="fleet-buoy-${d.id}" class="transition-transform duration-100">
             <line x1="0" y1="0" x2="0" y2="-28" stroke="${d.color}" stroke-width="1.5" stroke-dasharray="2 2" />
             <circle cx="0" cy="0" r="12" fill="${d.color}" fill-opacity="0.18" />
@@ -287,7 +459,9 @@ export default function Tide({ initial }: { initial: Reading }) {
               </text>
             </g>
           </g>
-        `).join("");
+        `,
+          )
+          .join("");
       }
     }
 
@@ -295,17 +469,22 @@ export default function Tide({ initial }: { initial: Reading }) {
       const container = root.querySelector("#dept-list");
       if (!container) return;
 
-      const values = departments.map((d) => Math.min(100, Math.max(0, baseValue + d.offset)));
+      const values = departments.map((d) =>
+        Math.min(100, Math.max(0, baseValue + d.offset)),
+      );
       const spread = Math.round(Math.max(...values) - Math.min(...values));
       const spreadEl = root.querySelector("#company-spread-label");
       if (spreadEl) spreadEl.textContent = `Spredning: ${spread}%`;
 
-      container.innerHTML = departments.map((d) => {
-        const val = Math.min(100, Math.max(0, baseValue + d.offset));
-        const isSelected = selectedDeptId === d.id;
-        return `
+      container.innerHTML = departments
+        .map((d) => {
+          const val = Math.min(100, Math.max(0, baseValue + d.offset));
+          const isSelected = selectedDeptId === d.id;
+          return `
           <div data-dept-id="${d.id}" class="dept-row p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-            isSelected ? "bg-teal-500/20 border-teal-300/60" : "bg-white/5 border-white/10 hover:bg-white/10"
+            isSelected
+              ? "bg-teal-500/20 border-teal-300/60"
+              : "bg-white/5 border-white/10 hover:bg-white/10"
           }">
             <div class="flex items-center gap-2.5">
               <span class="w-3 h-3 rounded-full shrink-0" style="background:${d.color}"></span>
@@ -325,7 +504,8 @@ export default function Tide({ initial }: { initial: Reading }) {
             </div>
           </div>
         `;
-      }).join("");
+        })
+        .join("");
 
       container.querySelectorAll(".dept-row").forEach((row) => {
         row.addEventListener("click", () => {
@@ -341,7 +521,7 @@ export default function Tide({ initial }: { initial: Reading }) {
       text: root.querySelector(`#text-${key}`),
       whole: root.querySelector(`#whole-${key}`),
       frac: root.querySelector(`#frac-${key}`),
-      pct: root.querySelector(`#pct-${key}`)
+      pct: root.querySelector(`#pct-${key}`),
     }));
 
     // HUD elements
@@ -350,7 +530,9 @@ export default function Tide({ initial }: { initial: Reading }) {
     const trendLabelEl = root.querySelector("#trend-label");
     const countdownLabelEl = root.querySelector("#countdown-label");
     const velocityReadoutEl = root.querySelector("#velocity-readout");
-    const timeScrubberEl = root.querySelector("#time-scrubber") as HTMLInputElement;
+    const timeScrubberEl = root.querySelector(
+      "#time-scrubber",
+    ) as HTMLInputElement;
     const scrubberDayLabelEl = root.querySelector("#scrubber-day-label");
     const btnResetLive = root.querySelector("#btn-reset-live");
     const liveBadge = root.querySelector("#live-badge");
@@ -360,11 +542,14 @@ export default function Tide({ initial }: { initial: Reading }) {
 
     // Create particle SVG circles once
     const particleNodes = particles.map((p) => {
-      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      const c = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "circle",
+      );
       c.setAttribute("r", p.r.toFixed(1));
       c.setAttribute("fill", "var(--foam)");
       c.setAttribute("fill-opacity", "0.28");
-      if(particlesGroup) particlesGroup.appendChild(c);
+      if (particlesGroup) particlesGroup.appendChild(c);
       return c;
     });
 
@@ -398,14 +583,16 @@ export default function Tide({ initial }: { initial: Reading }) {
         `;
       });
 
-      if(staffGroup) staffGroup.innerHTML = svgContent;
+      if (staffGroup) staffGroup.innerHTML = svgContent;
 
       // Render HTML interactive labels next to the staff marks
-      if(staffLabelsOverlay) {
-        staffLabelsOverlay.innerHTML = BAND_ORDER.slice().reverse().map((band, revIdx) => {
-          const i = BAND_ORDER.length - 1 - revIdx;
-          const pct = i * 20 + 10;
-          return `
+      if (staffLabelsOverlay) {
+        staffLabelsOverlay.innerHTML = BAND_ORDER.slice()
+          .reverse()
+          .map((band, revIdx) => {
+            const i = BAND_ORDER.length - 1 - revIdx;
+            const pct = i * 20 + 10;
+            return `
             <div id="staff-label-${band}"
                  style="position: absolute; top: ${100 - pct}%; left: ${staff.major + 8}px; transform: translateY(-50%);"
                  class="staff-label flex items-center gap-2 pointer-events-auto cursor-pointer group"
@@ -415,17 +602,26 @@ export default function Tide({ initial }: { initial: Reading }) {
               </span>
             </div>
           `;
-        }).join("");
+          })
+          .join("");
 
         // Allow clicking a depth band label to preview that depth
-        staffLabelsOverlay.querySelectorAll("[data-target-band]").forEach((el) => {
-          el.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const band = el.getAttribute("data-target-band")!;
-            const targetHoursMap: Record<string, number> = { ankle: 20, knee: 58, waist: 80, chest: 96, over: 116 };
-            activateScrubber(targetHoursMap[band] ?? 112);
+        staffLabelsOverlay
+          .querySelectorAll("[data-target-band]")
+          .forEach((el) => {
+            el.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const band = el.getAttribute("data-target-band")!;
+              const targetHoursMap: Record<string, number> = {
+                ankle: 20,
+                knee: 58,
+                waist: 80,
+                chest: 96,
+                over: 116,
+              };
+              activateScrubber(targetHoursMap[band] ?? 112);
+            });
           });
-        });
       }
     }
 
@@ -448,7 +644,15 @@ export default function Tide({ initial }: { initial: Reading }) {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    function computeWaveGeometry(w: number, h: number, baseLevelY: number, clockSec: number, waveSpec: any[], includeRipples: boolean, nowMs: number) {
+    function computeWaveGeometry(
+      w: number,
+      h: number,
+      baseLevelY: number,
+      clockSec: number,
+      waveSpec: any[],
+      includeRipples: boolean,
+      nowMs: number,
+    ) {
       const points = [];
       for (let i = 0; i <= SAMPLES; i++) {
         const xNorm = i / SAMPLES;
@@ -457,7 +661,10 @@ export default function Tide({ initial }: { initial: Reading }) {
 
         // Harmonic sine waves
         for (const { amplitude, periods, cyclesPerSecond } of waveSpec) {
-          y += amplitude * h * Math.sin(xNorm * periods * TAU + clockSec * cyclesPerSecond * TAU);
+          y +=
+            amplitude *
+            h *
+            Math.sin(xNorm * periods * TAU + clockSec * cyclesPerSecond * TAU);
         }
 
         // Interactive cursor/touch ripples
@@ -479,7 +686,12 @@ export default function Tide({ initial }: { initial: Reading }) {
         points.push({ x, y });
       }
 
-      const lineCmd = points.map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+      const lineCmd = points
+        .map(
+          (p, idx) =>
+            `${idx === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`,
+        )
+        .join(" ");
       const bodyCmd = `${lineCmd} L ${w} ${h + 4} L 0 ${h + 4} Z`;
       return { lineCmd, bodyCmd, points };
     }
@@ -518,23 +730,29 @@ export default function Tide({ initial }: { initial: Reading }) {
         if (!layer.text || !layer.whole || !layer.frac || !layer.pct) return;
         layer.text.setAttribute("x", numeralX.toFixed(1));
         layer.text.setAttribute("y", numeralY.toFixed(1));
-        (layer.text as HTMLElement).style.fontSize = `${numeralSize.toFixed(1)}px`;
+        (layer.text as HTMLElement).style.fontSize =
+          `${numeralSize.toFixed(1)}px`;
 
         if (idx === 0) {
-          (layer.text as HTMLElement).style.strokeWidth = `${(numeralSize * 0.02).toFixed(2)}px`;
+          (layer.text as HTMLElement).style.strokeWidth =
+            `${(numeralSize * 0.02).toFixed(2)}px`;
         }
 
         layer.whole.textContent = wholeStr;
         layer.frac.textContent = `.${fracStr}`;
-        (layer.frac as HTMLElement).style.fontSize = `${(numeralSize * 0.26).toFixed(1)}px`;
+        (layer.frac as HTMLElement).style.fontSize =
+          `${(numeralSize * 0.26).toFixed(1)}px`;
         if (idx === 0) {
-          (layer.frac as HTMLElement).style.strokeWidth = `${(numeralSize * 0.009).toFixed(2)}px`;
+          (layer.frac as HTMLElement).style.strokeWidth =
+            `${(numeralSize * 0.009).toFixed(2)}px`;
         }
 
-        (layer.pct as HTMLElement).style.fontSize = `${(numeralSize * 0.15).toFixed(1)}px`;
+        (layer.pct as HTMLElement).style.fontSize =
+          `${(numeralSize * 0.15).toFixed(1)}px`;
         layer.pct.setAttribute("dx", (numeralSize * 0.06).toFixed(1));
         if (idx === 0) {
-          (layer.pct as HTMLElement).style.strokeWidth = `${(numeralSize * 0.007).toFixed(2)}px`;
+          (layer.pct as HTMLElement).style.strokeWidth =
+            `${(numeralSize * 0.007).toFixed(2)}px`;
         }
       });
     }
@@ -553,12 +771,17 @@ export default function Tide({ initial }: { initial: Reading }) {
 
       if (!audioCtx) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        const AudioContextClass =
+          window.AudioContext || (window as any).webkitAudioContext;
         audioCtx = new AudioContextClass();
 
         // Generate pink/brown noise buffer for soothing ocean surf
         const bufferSize = audioCtx.sampleRate * 4;
-        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const buffer = audioCtx.createBuffer(
+          1,
+          bufferSize,
+          audioCtx.sampleRate,
+        );
         const output = buffer.getChannelData(0);
         let lastOut = 0.0;
         for (let i = 0; i < bufferSize; i++) {
@@ -603,11 +826,15 @@ export default function Tide({ initial }: { initial: Reading }) {
 
     function animate(nowMs: number) {
       const elapsedBoot = (nowMs - bootTime) / 1000;
-      const sweepFactor = Math.min(1, 1 - Math.pow(2, -8 * (elapsedBoot / 1.6)));
+      const sweepFactor = Math.min(
+        1,
+        1 - Math.pow(2, -8 * (elapsedBoot / 1.6)),
+      );
 
-      const activeHours = isScrubbing && scrubbedHours !== null
-        ? scrubbedHours
-        : getLiveOsloHours(new Date());
+      const activeHours =
+        isScrubbing && scrubbedHours !== null
+          ? scrubbedHours
+          : getLiveOsloHours(new Date());
 
       // Official Oslo reading
       const officialReading = evaluateAtHours(activeHours, RISE_END, 0);
@@ -616,13 +843,23 @@ export default function Tide({ initial }: { initial: Reading }) {
       let activeReading = officialReading;
       if (activeMode === "personal") {
         const customRiseEnd = 4 * 24 + personalFridayHour;
-        activeReading = evaluateAtHours(activeHours, customRiseEnd, personalBoost);
+        activeReading = evaluateAtHours(
+          activeHours,
+          customRiseEnd,
+          personalBoost,
+        );
       } else if (activeMode === "company") {
         if (selectedDeptId) {
           const dept = departments.find((d) => d.id === selectedDeptId);
-          activeReading = evaluateAtHours(activeHours, RISE_END, dept ? dept.offset : 0);
+          activeReading = evaluateAtHours(
+            activeHours,
+            RISE_END,
+            dept ? dept.offset : 0,
+          );
         } else {
-          const avgOffset = departments.reduce((acc, d) => acc + d.offset, 0) / departments.length;
+          const avgOffset =
+            departments.reduce((acc, d) => acc + d.offset, 0) /
+            departments.length;
           activeReading = evaluateAtHours(activeHours, RISE_END, avgOffset);
         }
       }
@@ -632,7 +869,8 @@ export default function Tide({ initial }: { initial: Reading }) {
 
       // Smooth damping when scrubbing or transitioning
       displayedValue += (targetValue - displayedValue) * 0.14;
-      displayedOfficialValue += (targetOfficialValue - displayedOfficialValue) * 0.14;
+      displayedOfficialValue +=
+        (targetOfficialValue - displayedOfficialValue) * 0.14;
 
       const [wholeStr, fracStr] = displayedValue.toFixed(4).split(".");
       updateReadoutLayout(wholeStr, fracStr);
@@ -648,8 +886,24 @@ export default function Tide({ initial }: { initial: Reading }) {
       const { w, h } = viewport;
       const levelY = h * (1 - displayedValue / 100);
 
-      const frontWave = computeWaveGeometry(w, h, levelY, elapsedBoot, FRONT_WAVES, true, nowMs);
-      const backWave = computeWaveGeometry(w, h, levelY - 8, elapsedBoot + 12, BACK_WAVES, false, nowMs);
+      const frontWave = computeWaveGeometry(
+        w,
+        h,
+        levelY,
+        elapsedBoot,
+        FRONT_WAVES,
+        true,
+        nowMs,
+      );
+      const backWave = computeWaveGeometry(
+        w,
+        h,
+        levelY - 8,
+        elapsedBoot + 12,
+        BACK_WAVES,
+        false,
+        nowMs,
+      );
 
       waveFrontBody?.setAttribute("d", frontWave.bodyCmd);
       waveCausticBody?.setAttribute("d", frontWave.bodyCmd);
@@ -663,7 +917,15 @@ export default function Tide({ initial }: { initial: Reading }) {
       // In Personal mode, render the Official Oslo tide as a dashed reference line
       if (activeMode === "personal") {
         const officialY = h * (1 - displayedOfficialValue / 100);
-        const officialWave = computeWaveGeometry(w, h, officialY, elapsedBoot, BACK_WAVES, false, nowMs);
+        const officialWave = computeWaveGeometry(
+          w,
+          h,
+          officialY,
+          elapsedBoot,
+          BACK_WAVES,
+          false,
+          nowMs,
+        );
         wavePersonalLine?.setAttribute("d", officialWave.lineCmd);
         const delta = displayedValue - displayedOfficialValue;
         const deltaEl = root.querySelector("#personal-delta-badge");
@@ -676,21 +938,36 @@ export default function Tide({ initial }: { initial: Reading }) {
       const buoyIdx = Math.floor(SAMPLES * 0.84);
       const buoyPt = frontWave.points[buoyIdx];
       if (buoyPt) {
-        buoyGroup?.setAttribute("transform", `translate(${buoyPt.x.toFixed(1)}, ${buoyPt.y.toFixed(1)})`);
+        buoyGroup?.setAttribute(
+          "transform",
+          `translate(${buoyPt.x.toFixed(1)}, ${buoyPt.y.toFixed(1)})`,
+        );
       }
 
       // Position Department Fleet Buoys in Company Mode
       if (activeMode === "company") {
         departments.forEach((d) => {
-          const deptVal = Math.min(100, Math.max(0, displayedOfficialValue + d.offset));
+          const deptVal = Math.min(
+            100,
+            Math.max(0, displayedOfficialValue + d.offset),
+          );
           const deptY = h * (1 - deptVal / 100);
-          const sampleIdx = Math.min(SAMPLES, Math.max(0, Math.floor(d.xNorm * SAMPLES)));
-          const waveOffset = frontWave.points[sampleIdx] ? frontWave.points[sampleIdx].y - levelY : 0;
+          const sampleIdx = Math.min(
+            SAMPLES,
+            Math.max(0, Math.floor(d.xNorm * SAMPLES)),
+          );
+          const waveOffset = frontWave.points[sampleIdx]
+            ? frontWave.points[sampleIdx].y - levelY
+            : 0;
           const xPos = d.xNorm * w;
           const yPos = deptY + waveOffset;
           const node = root.querySelector(`#fleet-buoy-${d.id}`);
           const pctNode = root.querySelector(`#fleet-pct-${d.id}`);
-          if (node) node.setAttribute("transform", `translate(${xPos.toFixed(1)}, ${yPos.toFixed(1)})`);
+          if (node)
+            node.setAttribute(
+              "transform",
+              `translate(${xPos.toFixed(1)}, ${yPos.toFixed(1)})`,
+            );
           if (pctNode) pctNode.textContent = `${Math.round(deptVal)}%`;
         });
       }
@@ -712,8 +989,15 @@ export default function Tide({ initial }: { initial: Reading }) {
 
       // Modulate ocean sound filter with wave motion if active
       if (isAudioPlaying && audioFilter && audioCtx) {
-        const swellFreq = 220 + (displayedValue / 100) * 260 + Math.sin(elapsedBoot * 0.45) * 90;
-        audioFilter.frequency.setTargetAtTime(swellFreq, audioCtx.currentTime, 0.1);
+        const swellFreq =
+          220 +
+          (displayedValue / 100) * 260 +
+          Math.sin(elapsedBoot * 0.45) * 90;
+        audioFilter.frequency.setTargetAtTime(
+          swellFreq,
+          audioCtx.currentTime,
+          0.1,
+        );
       }
 
       // Highlight active depth band on the staff
@@ -729,11 +1013,15 @@ export default function Tide({ initial }: { initial: Reading }) {
             if (b === currentBand) {
               line?.setAttribute("stroke-opacity", "1");
               line?.setAttribute("stroke-width", "2.5");
-              if (textSpan) textSpan.className = "text-xs sm:text-sm font-bold tracking-wide text-[var(--foam)] drop-shadow transition-all whitespace-nowrap";
+              if (textSpan)
+                textSpan.className =
+                  "text-xs sm:text-sm font-bold tracking-wide text-[var(--foam)] drop-shadow transition-all whitespace-nowrap";
             } else {
               line?.setAttribute("stroke-opacity", "0.4");
               line?.setAttribute("stroke-width", "1.5");
-              if (textSpan) textSpan.className = "text-[11px] sm:text-xs font-medium tracking-wide text-[var(--foam)]/40 group-hover:text-[var(--foam)] transition-all whitespace-nowrap";
+              if (textSpan)
+                textSpan.className =
+                  "text-[11px] sm:text-xs font-medium tracking-wide text-[var(--foam)]/40 group-hover:text-[var(--foam)] transition-all whitespace-nowrap";
             }
           }
         });
@@ -741,32 +1029,45 @@ export default function Tide({ initial }: { initial: Reading }) {
 
       // Update HUD text & Scrubber
       const pad = (n: number) => String(n).padStart(2, "0");
-      if(osloClockEl) osloClockEl.textContent = `${WEEKDAY_SHORT_NO[activeReading.weekday]} ${pad(activeReading.hour)}:${pad(activeReading.minute)}:${pad(activeReading.second)}`;
-      if(bandNameEl) bandNameEl.textContent = BANDS[currentBand].label;
+      if (osloClockEl)
+        osloClockEl.textContent = `${WEEKDAY_SHORT_NO[activeReading.weekday]} ${pad(activeReading.hour)}:${pad(activeReading.minute)}:${pad(activeReading.second)}`;
+      if (bandNameEl) bandNameEl.textContent = BANDS[currentBand].label;
 
       const trendTextMap: Record<string, string> = {
         rising: "Flommer inn mot helg ↑",
         holding: "Høyvann — det er helg! ★",
-        falling: "Ebber ut mot mandag ↓"
+        falling: "Ebber ut mot mandag ↓",
       };
-      if(trendLabelEl) trendLabelEl.textContent = trendTextMap[activeReading.trend];
-      if(countdownLabelEl) countdownLabelEl.textContent = formatCountdown(activeReading.hours);
+      if (trendLabelEl)
+        trendLabelEl.textContent = trendTextMap[activeReading.trend];
+      if (countdownLabelEl)
+        countdownLabelEl.textContent = formatCountdown(activeReading.hours);
 
       const velSign = activeReading.velocityPerHour >= 0 ? "+" : "";
-      if(velocityReadoutEl) velocityReadoutEl.textContent = `${velSign}${activeReading.velocityPerHour.toFixed(2)} %/t`;
+      if (velocityReadoutEl)
+        velocityReadoutEl.textContent = `${velSign}${activeReading.velocityPerHour.toFixed(2)} %/t`;
 
       if (!isScrubbing && timeScrubberEl) {
         timeScrubberEl.value = activeReading.hours.toFixed(2);
       }
-      if(scrubberDayLabelEl) scrubberDayLabelEl.textContent = `${WEEKDAY_SHORT_NO[activeReading.weekday]} ${pad(activeReading.hour)}:${pad(activeReading.minute)}`;
+      if (scrubberDayLabelEl)
+        scrubberDayLabelEl.textContent = `${WEEKDAY_SHORT_NO[activeReading.weekday]} ${pad(activeReading.hour)}:${pad(activeReading.minute)}`;
 
       // Update Week Curve Drawer Marker
       const cursorX = (activeReading.hours / 168) * 700;
       const cursorY = 120 - 12 - (displayedValue / 100) * (120 - 24);
-      root.querySelector("#week-curve-cursor")?.setAttribute("x1", cursorX.toFixed(1));
-      root.querySelector("#week-curve-cursor")?.setAttribute("x2", cursorX.toFixed(1));
-      root.querySelector("#week-curve-dot")?.setAttribute("cx", cursorX.toFixed(1));
-      root.querySelector("#week-curve-dot")?.setAttribute("cy", cursorY.toFixed(1));
+      root
+        .querySelector("#week-curve-cursor")
+        ?.setAttribute("x1", cursorX.toFixed(1));
+      root
+        .querySelector("#week-curve-cursor")
+        ?.setAttribute("x2", cursorX.toFixed(1));
+      root
+        .querySelector("#week-curve-dot")
+        ?.setAttribute("cx", cursorX.toFixed(1));
+      root
+        .querySelector("#week-curve-dot")
+        ?.setAttribute("cy", cursorY.toFixed(1));
 
       animationFrameId = requestAnimationFrame(animate);
     }
@@ -775,12 +1076,14 @@ export default function Tide({ initial }: { initial: Reading }) {
     function activateScrubber(hoursValue: number) {
       isScrubbing = true;
       scrubbedHours = Math.max(0, Math.min(167.99, Number(hoursValue)));
-      if(timeScrubberEl) timeScrubberEl.value = scrubbedHours.toString();
+      if (timeScrubberEl) timeScrubberEl.value = scrubbedHours.toString();
       btnResetLive?.classList.remove("hidden");
       btnResetLive?.classList.add("inline-flex");
-      if(liveBadgeText) liveBadgeText.textContent = "Tidsmaskin";
-      if(liveBadge) liveBadge.className = "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono-tabular uppercase tracking-wider bg-amber-500/20 text-amber-200 border border-amber-400/30";
-      if(liveDot) liveDot.className = "w-1.5 h-1.5 rounded-full bg-amber-400";
+      if (liveBadgeText) liveBadgeText.textContent = "Tidsmaskin";
+      if (liveBadge)
+        liveBadge.className =
+          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono-tabular uppercase tracking-wider bg-amber-500/20 text-amber-200 border border-amber-400/30";
+      if (liveDot) liveDot.className = "w-1.5 h-1.5 rounded-full bg-amber-400";
     }
 
     function resetToLive() {
@@ -788,9 +1091,13 @@ export default function Tide({ initial }: { initial: Reading }) {
       scrubbedHours = null;
       btnResetLive?.classList.add("hidden");
       btnResetLive?.classList.remove("inline-flex");
-      if(liveBadgeText) liveBadgeText.textContent = "Direkte · Oslo";
-      if(liveBadge) liveBadge.className = "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono-tabular uppercase tracking-wider bg-emerald-500/20 text-emerald-200 border border-emerald-400/30";
-      if(liveDot) liveDot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping";
+      if (liveBadgeText) liveBadgeText.textContent = "Direkte · Oslo";
+      if (liveBadge)
+        liveBadge.className =
+          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono-tabular uppercase tracking-wider bg-emerald-500/20 text-emerald-200 border border-emerald-400/30";
+      if (liveDot)
+        liveDot.className =
+          "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping";
     }
 
     // Event Listeners
@@ -849,9 +1156,12 @@ export default function Tide({ initial }: { initial: Reading }) {
     let draggingChart = false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const scrubFromChart = (e: any) => {
-      if(!curveChartBox) return;
+      if (!curveChartBox) return;
       const rect = curveChartBox.getBoundingClientRect();
-      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const pct = Math.max(
+        0,
+        Math.min(1, (e.clientX - rect.left) / rect.width),
+      );
       activateScrubber(pct * 168);
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -869,30 +1179,46 @@ export default function Tide({ initial }: { initial: Reading }) {
     };
     window.addEventListener("pointerup", handleWinPointerUpChart);
 
-    root.querySelector("#btn-audio")?.addEventListener("click", toggleOceanAudio);
+    root
+      .querySelector("#btn-audio")
+      ?.addEventListener("click", toggleOceanAudio);
 
     // Concept Mode Switcher Logic
     const modeSubtitles: Record<string, string> = {
       classic: "Offisiell indeks · Hvor dypt står Norge i helgen akkurat nå?",
-      personal: "Personlig modus · Kalibrer når du tar helg og hvordan uken føles.",
-      company: "Bedriftsflåte · Se hvordan ulike avdelinger ligger an mot helgen.",
-      vibe: "Visuelle konsepter · Test ulike atmosfærer og instrument-temaer."
+      personal:
+        "Personlig modus · Kalibrer når du tar helg og hvordan uken føles.",
+      company:
+        "Bedriftsflåte · Se hvordan ulike avdelinger ligger an mot helgen.",
+      vibe: "Visuelle konsepter · Test ulike atmosfærer og instrument-temaer.",
     };
 
     root.querySelectorAll(".mode-tab").forEach((btn) => {
       btn.addEventListener("click", () => {
-        root.querySelectorAll(".mode-tab").forEach((b) => b.classList.remove("active"));
+        root
+          .querySelectorAll(".mode-tab")
+          .forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         activeMode = btn.getAttribute("data-mode")!;
 
         const mSubtitle = root.querySelector("#mode-subtitle");
-        if(mSubtitle) mSubtitle.textContent = modeSubtitles[activeMode] || "";
-        root.querySelector("#panel-personal")?.classList.toggle("hidden", activeMode !== "personal");
-        root.querySelector("#panel-company")?.classList.toggle("hidden", activeMode !== "company");
-        root.querySelector("#panel-vibe")?.classList.toggle("hidden", activeMode !== "vibe");
+        if (mSubtitle) mSubtitle.textContent = modeSubtitles[activeMode] || "";
+        root
+          .querySelector("#panel-personal")
+          ?.classList.toggle("hidden", activeMode !== "personal");
+        root
+          .querySelector("#panel-company")
+          ?.classList.toggle("hidden", activeMode !== "company");
+        root
+          .querySelector("#panel-vibe")
+          ?.classList.toggle("hidden", activeMode !== "vibe");
 
-        if(wavePersonalLine) (wavePersonalLine as HTMLElement).style.opacity = activeMode === "personal" ? "1" : "0";
-        if(fleetBuoysGroup) (fleetBuoysGroup as HTMLElement).style.opacity = activeMode === "company" ? "1" : "0";
+        if (wavePersonalLine)
+          (wavePersonalLine as HTMLElement).style.opacity =
+            activeMode === "personal" ? "1" : "0";
+        if (fleetBuoysGroup)
+          (fleetBuoysGroup as HTMLElement).style.opacity =
+            activeMode === "company" ? "1" : "0";
 
         if (activeMode === "company") {
           renderDepartmentList(displayedOfficialValue);
@@ -902,9 +1228,13 @@ export default function Tide({ initial }: { initial: Reading }) {
     });
 
     // Personal Calibration Listeners
-    const inputFriHour = root.querySelector("#input-fri-hour") as HTMLInputElement;
+    const inputFriHour = root.querySelector(
+      "#input-fri-hour",
+    ) as HTMLInputElement;
     const labelFriHour = root.querySelector("#label-fri-hour");
-    const inputVibeBoost = root.querySelector("#input-vibe-boost") as HTMLInputElement;
+    const inputVibeBoost = root.querySelector(
+      "#input-vibe-boost",
+    ) as HTMLInputElement;
     const labelVibeBoost = root.querySelector("#label-vibe-boost");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -912,7 +1242,8 @@ export default function Tide({ initial }: { initial: Reading }) {
       personalFridayHour = parseFloat(e.target.value);
       const hr = Math.floor(personalFridayHour);
       const min = (personalFridayHour - hr) * 60;
-      if(labelFriHour) labelFriHour.textContent = `${String(hr).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+      if (labelFriHour)
+        labelFriHour.textContent = `${String(hr).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
       spawnRipple(0.65, 16);
     });
 
@@ -920,7 +1251,9 @@ export default function Tide({ initial }: { initial: Reading }) {
     inputVibeBoost?.addEventListener("input", (e: any) => {
       personalBoost = parseInt(e.target.value, 10);
       const sign = personalBoost > 0 ? "+" : "";
-      if(labelVibeBoost) labelVibeBoost.textContent = personalBoost === 0 ? "Nøytral (0%)" : `${sign}${personalBoost}%`;
+      if (labelVibeBoost)
+        labelVibeBoost.textContent =
+          personalBoost === 0 ? "Nøytral (0%)" : `${sign}${personalBoost}%`;
       spawnRipple(0.35, 18);
     });
 
@@ -928,9 +1261,11 @@ export default function Tide({ initial }: { initial: Reading }) {
       chip.addEventListener("click", () => {
         const boost = parseInt(chip.getAttribute("data-boost")!, 10);
         personalBoost = Math.max(-25, Math.min(25, personalBoost + boost));
-        if(inputVibeBoost) inputVibeBoost.value = personalBoost.toString();
+        if (inputVibeBoost) inputVibeBoost.value = personalBoost.toString();
         const sign = personalBoost > 0 ? "+" : "";
-        if(labelVibeBoost) labelVibeBoost.textContent = personalBoost === 0 ? "Nøytral (0%)" : `${sign}${personalBoost}%`;
+        if (labelVibeBoost)
+          labelVibeBoost.textContent =
+            personalBoost === 0 ? "Nøytral (0%)" : `${sign}${personalBoost}%`;
         spawnRipple(0.5, boost * 1.5);
       });
     });
@@ -938,16 +1273,18 @@ export default function Tide({ initial }: { initial: Reading }) {
     root.querySelector("#btn-reset-personal")?.addEventListener("click", () => {
       personalFridayHour = 16.0;
       personalBoost = 0;
-      if(inputFriHour) inputFriHour.value = "16";
-      if(inputVibeBoost) inputVibeBoost.value = "0";
-      if(labelFriHour) labelFriHour.textContent = "16:00";
-      if(labelVibeBoost) labelVibeBoost.textContent = "Nøytral (0%)";
+      if (inputFriHour) inputFriHour.value = "16";
+      if (inputVibeBoost) inputVibeBoost.value = "0";
+      if (labelFriHour) labelFriHour.textContent = "16:00";
+      if (labelVibeBoost) labelVibeBoost.textContent = "Nøytral (0%)";
       spawnRipple(0.5, -20);
     });
 
     // Company Check-in Pulse Button
     root.querySelector("#btn-checkin-pulse")?.addEventListener("click", () => {
-      const targetId = selectedDeptId || departments[Math.floor(Math.random() * departments.length)].id;
+      const targetId =
+        selectedDeptId ||
+        departments[Math.floor(Math.random() * departments.length)].id;
       const dept = departments.find((d) => d.id === targetId);
       if (dept) {
         dept.members += 1;
@@ -962,10 +1299,18 @@ export default function Tide({ initial }: { initial: Reading }) {
     root.querySelectorAll(".theme-card").forEach((card) => {
       card.addEventListener("click", () => {
         activeVisualTheme = card.getAttribute("data-theme")!;
-        document.body.classList.toggle("theme-hygge", activeVisualTheme === "hygge");
-        document.body.classList.toggle("theme-sonar", activeVisualTheme === "sonar");
+        document.body.classList.toggle(
+          "theme-hygge",
+          activeVisualTheme === "hygge",
+        );
+        document.body.classList.toggle(
+          "theme-sonar",
+          activeVisualTheme === "sonar",
+        );
         const sonarOverlay = root.querySelector("#sonar-grid-overlay");
-        if(sonarOverlay) (sonarOverlay as HTMLElement).style.opacity = activeVisualTheme === "sonar" ? "1" : "0";
+        if (sonarOverlay)
+          (sonarOverlay as HTMLElement).style.opacity =
+            activeVisualTheme === "sonar" ? "1" : "0";
         spawnRipple(0.5, 30);
       });
     });
@@ -984,7 +1329,7 @@ export default function Tide({ initial }: { initial: Reading }) {
       svgEl?.removeEventListener("pointerdown", handleSvgPointerDown);
       window.removeEventListener("pointermove", handleWinPointerMoveChart);
       window.removeEventListener("pointerup", handleWinPointerUpChart);
-      if(audioCtx) audioCtx.close();
+      if (audioCtx) audioCtx.close();
       document.body.classList.remove("theme-hygge");
       document.body.classList.remove("theme-sonar");
     };
@@ -993,18 +1338,32 @@ export default function Tide({ initial }: { initial: Reading }) {
 
   return (
     <div ref={containerRef}>
-      <div id="app" className="relative w-screen h-screen overflow-hidden select-none">
-
+      <div
+        id="app"
+        className="relative w-screen h-screen overflow-hidden select-none"
+      >
         {/* Ambient atmospheric sky glow */}
-        <div id="sky-glow" className="absolute inset-0 pointer-events-none transition-opacity duration-700"
-             style={{background: "radial-gradient(circle at 60% 25%, rgba(23, 163, 155, 0.16), transparent 65%)"}}>
-        </div>
+        <div
+          id="sky-glow"
+          className="absolute inset-0 pointer-events-none transition-opacity duration-700"
+          style={{
+            background:
+              "radial-gradient(circle at 60% 25%, rgba(23, 163, 155, 0.16), transparent 65%)",
+          }}
+        ></div>
 
         {/* Optional Sonar Grid Overlay for Instrument Mode */}
-        <div id="sonar-grid-overlay" className="absolute inset-0 pointer-events-none sonar-grid opacity-0 transition-opacity duration-500"></div>
+        <div
+          id="sonar-grid-overlay"
+          className="absolute inset-0 pointer-events-none sonar-grid opacity-0 transition-opacity duration-500"
+        ></div>
 
         {/* Main Interactive SVG Ocean & Readout */}
-        <svg id="ocean-svg" className="absolute inset-0 w-full h-full block" aria-hidden="true">
+        <svg
+          id="ocean-svg"
+          className="absolute inset-0 w-full h-full block"
+          aria-hidden="true"
+        >
           <defs>
             {/* Deep primary water gradient */}
             <linearGradient id="depth-grad" x1="0" y1="0" x2="0" y2="1">
@@ -1016,7 +1375,11 @@ export default function Tide({ initial }: { initial: Reading }) {
             {/* Secondary parallax wave gradient */}
             <linearGradient id="back-wave-grad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--foam)" stopOpacity="0.14" />
-              <stop offset="100%" stopColor="var(--surface)" stopOpacity="0.35" />
+              <stop
+                offset="100%"
+                stopColor="var(--surface)"
+                stopOpacity="0.35"
+              />
             </linearGradient>
 
             {/* Sunlight caustics shimmer gradient */}
@@ -1036,8 +1399,14 @@ export default function Tide({ initial }: { initial: Reading }) {
 
           {/* 1. Hollow Readout in the Air (Background Layer) */}
           <g id="readout-air-group">
-            <text id="text-air" className="readout readout--air" textAnchor="middle">
-              <tspan id="whole-air">0</tspan><tspan id="frac-air">.0000</tspan><tspan id="pct-air">%</tspan>
+            <text
+              id="text-air"
+              className="readout readout--air"
+              textAnchor="middle"
+            >
+              <tspan id="whole-air">0</tspan>
+              <tspan id="frac-air">.0000</tspan>
+              <tspan id="pct-air">%</tspan>
             </text>
           </g>
 
@@ -1047,8 +1416,14 @@ export default function Tide({ initial }: { initial: Reading }) {
 
           {/* Readout tinted by Back Wave */}
           <g clipPath="url(#clip-back-sea)">
-            <text id="text-back" className="readout readout--back-wave" textAnchor="middle">
-              <tspan id="whole-back">0</tspan><tspan id="frac-back">.0000</tspan><tspan id="pct-back">%</tspan>
+            <text
+              id="text-back"
+              className="readout readout--back-wave"
+              textAnchor="middle"
+            >
+              <tspan id="whole-back">0</tspan>
+              <tspan id="frac-back">.0000</tspan>
+              <tspan id="pct-back">%</tspan>
             </text>
           </g>
 
@@ -1061,8 +1436,14 @@ export default function Tide({ initial }: { initial: Reading }) {
 
           {/* 5. Solid Ink Readout Submerged in Front Wave */}
           <g clipPath="url(#clip-front-sea)">
-            <text id="text-sea" className="readout readout--sea" textAnchor="middle">
-              <tspan id="whole-sea">0</tspan><tspan id="frac-sea">.0000</tspan><tspan id="pct-sea">%</tspan>
+            <text
+              id="text-sea"
+              className="readout readout--sea"
+              textAnchor="middle"
+            >
+              <tspan id="whole-sea">0</tspan>
+              <tspan id="frac-sea">.0000</tspan>
+              <tspan id="pct-sea">%</tspan>
             </text>
           </g>
 
@@ -1070,33 +1451,59 @@ export default function Tide({ initial }: { initial: Reading }) {
           <path id="wave-front-line" className="waterline-main" d="" />
 
           {/* 6b. Personal Calibration Ghost Waterline (Visible in Personal Mode) */}
-          <path id="wave-personal-line" className="waterline-personal opacity-0 transition-opacity duration-500" d="" />
+          <path
+            id="wave-personal-line"
+            className="waterline-personal opacity-0 transition-opacity duration-500"
+            d=""
+          />
 
           {/* 7. Floating Surface Buoy Marker (Global / Active) */}
           <g id="buoy-group" className="transition-transform duration-75">
-            <circle cx="0" cy="0" r="14" fill="var(--foam)" fillOpacity="0.12" className="animate-pulse-slow" />
+            <circle
+              cx="0"
+              cy="0"
+              r="14"
+              fill="var(--foam)"
+              fillOpacity="0.12"
+              className="animate-pulse-slow"
+            />
             <circle cx="0" cy="0" r="4.5" fill="var(--foam)" />
           </g>
 
           {/* 7b. Company Department Fleet Buoys (Visible in Bedrift Mode) */}
-          <g id="fleet-buoys-group" className="opacity-0 transition-opacity duration-500 pointer-events-none"></g>
+          <g
+            id="fleet-buoys-group"
+            className="opacity-0 transition-opacity duration-500 pointer-events-none"
+          ></g>
 
           {/* 8. Left Depth Staff & Interactive Graduations */}
           <g id="staff-group"></g>
         </svg>
 
         {/* Interactive Depth Staff Labels Overlay (Left side) */}
-        <div id="staff-labels-overlay" className="absolute left-0 top-0 bottom-0 pointer-events-none z-10 flex flex-col justify-between"></div>
+        <div
+          id="staff-labels-overlay"
+          className="absolute left-0 top-0 bottom-0 pointer-events-none z-10 flex flex-col justify-between"
+        ></div>
 
         {/* HUD Chrome Frame */}
         <div className="relative z-20 w-full h-full flex flex-col justify-between p-4 sm:p-7 pl-[calc(var(--staff-width)+0.75rem)] sm:pl-[calc(var(--staff-width)+1.75rem)] pointer-events-none">
-
           {/* Top Header Bar */}
           <header className="flex flex-wrap items-center justify-between gap-3 pointer-events-auto">
             <div className="flex items-center gap-3">
               <div className="relative flex items-center justify-center w-9 h-9 rounded-xl glass-pill">
-                <svg className="w-5 h-5 text-[var(--foam)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2 12c2.5-3 5.5-3 8 0s5.5 3 8 0 4-2 4-2M2 17c2.5-3 5.5-3 8 0s5.5 3 8 0 4-2 4-2" />
+                <svg
+                  className="w-5 h-5 text-[var(--foam)]"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M2 12c2.5-3 5.5-3 8 0s5.5 3 8 0 4-2 4-2M2 17c2.5-3 5.5-3 8 0s5.5 3 8 0 4-2 4-2"
+                  />
                 </svg>
               </div>
               <div>
@@ -1104,32 +1511,60 @@ export default function Tide({ initial }: { initial: Reading }) {
                   <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[var(--foam)] m-0 leading-none wordmark">
                     helgefølelse
                   </h1>
-                  <span id="live-badge" className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono-tabular uppercase tracking-wider bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
-                    <span id="live-dot" className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                  <span
+                    id="live-badge"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono-tabular uppercase tracking-wider bg-emerald-500/20 text-emerald-200 border border-emerald-400/30"
+                  >
+                    <span
+                      id="live-dot"
+                      className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"
+                    ></span>
                     <span id="live-badge-text">Direkte · Oslo</span>
                   </span>
                 </div>
-                <p id="mode-subtitle" className="text-xs text-[var(--foam)]/60 m-0 mt-1 hidden xl:block">
+                <p
+                  id="mode-subtitle"
+                  className="text-xs text-[var(--foam)]/60 m-0 mt-1 hidden xl:block"
+                >
                   Offisiell indeks · Hvor dypt står Norge i helgen akkurat nå?
                 </p>
               </div>
             </div>
 
             {/* Center Concept Mode Switcher */}
-            <nav className="flex items-center gap-1 p-1 rounded-2xl glass-panel text-xs font-medium order-3 lg:order-2 w-full lg:w-auto justify-center overflow-x-auto" aria-label="Designkonsepter">
-              <button type="button" data-mode="classic" className="mode-tab active px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer text-[var(--foam)]/80 whitespace-nowrap">
+            <nav
+              className="flex items-center gap-1 p-1 rounded-2xl glass-panel text-xs font-medium order-3 lg:order-2 w-full lg:w-auto justify-center overflow-x-auto"
+              aria-label="Designkonsepter"
+            >
+              <button
+                type="button"
+                data-mode="classic"
+                className="mode-tab active px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer text-[var(--foam)]/80 whitespace-nowrap"
+              >
                 <span>🌊</span>
                 <span>1. Felles Tidevann</span>
               </button>
-              <button type="button" data-mode="personal" className="mode-tab px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer text-[var(--foam)]/80 whitespace-nowrap">
+              <button
+                type="button"
+                data-mode="personal"
+                className="mode-tab px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer text-[var(--foam)]/80 whitespace-nowrap"
+              >
                 <span>🧭</span>
                 <span>2. Min Egen (Personlig)</span>
               </button>
-              <button type="button" data-mode="company" className="mode-tab px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer text-[var(--foam)]/80 whitespace-nowrap">
+              <button
+                type="button"
+                data-mode="company"
+                className="mode-tab px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer text-[var(--foam)]/80 whitespace-nowrap"
+              >
                 <span>⛵</span>
                 <span>3. Bedrift & Avdelinger</span>
               </button>
-              <button type="button" data-mode="vibe" className="mode-tab px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer text-[var(--foam)]/80 whitespace-nowrap">
+              <button
+                type="button"
+                data-mode="vibe"
+                className="mode-tab px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer text-[var(--foam)]/80 whitespace-nowrap"
+              >
                 <span>✨</span>
                 <span>4. Visuelle Temaer</span>
               </button>
@@ -1138,23 +1573,74 @@ export default function Tide({ initial }: { initial: Reading }) {
             {/* Right Status Pills & Interactive Toggles */}
             <div className="flex items-center gap-2 order-2 lg:order-3">
               <div className="glass-pill px-3 py-2 rounded-xl flex items-center gap-2 text-xs font-mono-tabular">
-                <span id="oslo-clock" className="font-semibold text-[var(--foam)]">Ons 17:18:00</span>
+                <span
+                  id="oslo-clock"
+                  className="font-semibold text-[var(--foam)]"
+                >
+                  Ons 17:18:00
+                </span>
               </div>
 
-              <button id="btn-curve-modal" type="button" className="glass-pill px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 cursor-pointer text-[var(--foam)]" title="Utforsk ukekurven">
-                <svg className="w-4 h-4 text-teal-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 17c3 0 4-10 9-10s6 10 9 10" />
+              <button
+                id="btn-curve-modal"
+                type="button"
+                className="glass-pill px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 cursor-pointer text-[var(--foam)]"
+                title="Utforsk ukekurven"
+              >
+                <svg
+                  className="w-4 h-4 text-teal-300"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 17c3 0 4-10 9-10s6 10 9 10"
+                  />
                 </svg>
                 <span className="hidden sm:inline">Ukekurve</span>
               </button>
 
-              <button id="btn-audio" type="button" className="glass-pill p-2 rounded-xl text-xs font-medium flex items-center justify-center cursor-pointer text-[var(--foam)]" title="Slå på havlyd (Web Audio)">
-                <svg id="icon-audio-off" className="w-4 h-4 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              <button
+                id="btn-audio"
+                type="button"
+                className="glass-pill p-2 rounded-xl text-xs font-medium flex items-center justify-center cursor-pointer text-[var(--foam)]"
+                title="Slå på havlyd (Web Audio)"
+              >
+                <svg
+                  id="icon-audio-off"
+                  className="w-4 h-4 opacity-70"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                  />
                 </svg>
-                <svg id="icon-audio-on" className="w-4 h-4 text-teal-300 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                <svg
+                  id="icon-audio-on"
+                  className="w-4 h-4 text-teal-300 hidden"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                  />
                 </svg>
               </button>
             </div>
@@ -1162,17 +1648,30 @@ export default function Tide({ initial }: { initial: Reading }) {
 
           {/* Middle Contextual Workspace (Changes per selected concept mode) */}
           <div className="my-auto flex flex-col md:flex-row items-center justify-between gap-4 pointer-events-none w-full max-w-6xl mx-auto">
-
             {/* PANEL A: PERSONAL HELGEFØLELSE CALIBRATOR (Mode: personal) */}
-            <aside id="panel-personal" className="hidden pointer-events-auto glass-panel rounded-2xl p-4 sm:p-5 w-full max-w-sm ml-auto space-y-4">
+            <aside
+              id="panel-personal"
+              className="hidden pointer-events-auto glass-panel rounded-2xl p-4 sm:p-5 w-full max-w-sm ml-auto space-y-4"
+            >
               <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
                 <div>
-                  <span className="text-[10px] font-mono-tabular uppercase tracking-wider text-amber-300 block">Personlig Kalibrering</span>
-                  <h2 className="text-sm font-bold text-[var(--foam)]">Din subjektive helgefølelse</h2>
+                  <span className="text-[10px] font-mono-tabular uppercase tracking-wider text-amber-300 block">
+                    Personlig Kalibrering
+                  </span>
+                  <h2 className="text-sm font-bold text-[var(--foam)]">
+                    Din subjektive helgefølelse
+                  </h2>
                 </div>
                 <div className="text-right font-mono-tabular">
-                  <span className="text-[10px] text-[var(--foam)]/60 block">Avvik fra snitt</span>
-                  <span id="personal-delta-badge" className="text-xs font-bold text-amber-300">+0.0%</span>
+                  <span className="text-[10px] text-[var(--foam)]/60 block">
+                    Avvik fra snitt
+                  </span>
+                  <span
+                    id="personal-delta-badge"
+                    className="text-xs font-bold text-amber-300"
+                  >
+                    +0.0%
+                  </span>
                 </div>
               </div>
 
@@ -1180,10 +1679,25 @@ export default function Tide({ initial }: { initial: Reading }) {
                 {/* 1. When does your weekend start? */}
                 <div>
                   <div className="flex justify-between mb-1">
-                    <span className="text-[var(--foam)]/80">Når tar du helg på fredag?</span>
-                    <span id="label-fri-hour" className="font-mono-tabular font-semibold text-amber-300">16:00</span>
+                    <span className="text-[var(--foam)]/80">
+                      Når tar du helg på fredag?
+                    </span>
+                    <span
+                      id="label-fri-hour"
+                      className="font-mono-tabular font-semibold text-amber-300"
+                    >
+                      16:00
+                    </span>
                   </div>
-                  <input id="input-fri-hour" type="range" min="11" max="20" step="0.5" defaultValue="16" className="calib-slider" />
+                  <input
+                    id="input-fri-hour"
+                    type="range"
+                    min="11"
+                    max="20"
+                    step="0.5"
+                    defaultValue="16"
+                    className="calib-slider"
+                  />
                   <div className="flex justify-between text-[10px] text-[var(--foam)]/40 font-mono-tabular mt-0.5">
                     <span>11:00 (Tidlig)</span>
                     <span>16:00</span>
@@ -1194,10 +1708,25 @@ export default function Tide({ initial }: { initial: Reading }) {
                 {/* 2. Energy / Workload modifier */}
                 <div>
                   <div className="flex justify-between mb-1">
-                    <span className="text-[var(--foam)]/80">Mentalt batteri & arbeidsro</span>
-                    <span id="label-vibe-boost" className="font-mono-tabular font-semibold text-amber-300">Nøytral (0%)</span>
+                    <span className="text-[var(--foam)]/80">
+                      Mentalt batteri & arbeidsro
+                    </span>
+                    <span
+                      id="label-vibe-boost"
+                      className="font-mono-tabular font-semibold text-amber-300"
+                    >
+                      Nøytral (0%)
+                    </span>
                   </div>
-                  <input id="input-vibe-boost" type="range" min="-25" max="25" step="1" defaultValue="0" className="calib-slider" />
+                  <input
+                    id="input-vibe-boost"
+                    type="range"
+                    min="-25"
+                    max="25"
+                    step="1"
+                    defaultValue="0"
+                    className="calib-slider"
+                  />
                   <div className="flex justify-between text-[10px] text-[var(--foam)]/40 font-mono-tabular mt-0.5">
                     <span>🔥 Kjørt (-25%)</span>
                     <span>Normal</span>
@@ -1207,15 +1736,29 @@ export default function Tide({ initial }: { initial: Reading }) {
 
                 {/* Quick situational toggles */}
                 <div className="pt-1">
-                  <span className="text-[11px] text-[var(--foam)]/60 block mb-1.5">Hurtigfaktorer:</span>
+                  <span className="text-[11px] text-[var(--foam)]/60 block mb-1.5">
+                    Hurtigfaktorer:
+                  </span>
                   <div className="flex flex-wrap gap-1.5">
-                    <button type="button" data-boost="12" className="boost-chip px-2.5 py-1 rounded-lg bg-white/5 hover:bg-amber-400/20 border border-white/10 text-[11px] text-[var(--foam)]/85 cursor-pointer transition-all">
+                    <button
+                      type="button"
+                      data-boost="12"
+                      className="boost-chip px-2.5 py-1 rounded-lg bg-white/5 hover:bg-amber-400/20 border border-white/10 text-[11px] text-[var(--foam)]/85 cursor-pointer transition-all"
+                    >
                       🏠 Hjemmekontor (+12%)
                     </button>
-                    <button type="button" data-boost="15" className="boost-chip px-2.5 py-1 rounded-lg bg-white/5 hover:bg-amber-400/20 border border-white/10 text-[11px] text-[var(--foam)]/85 cursor-pointer transition-all">
+                    <button
+                      type="button"
+                      data-boost="15"
+                      className="boost-chip px-2.5 py-1 rounded-lg bg-white/5 hover:bg-amber-400/20 border border-white/10 text-[11px] text-[var(--foam)]/85 cursor-pointer transition-all"
+                    >
                       ☀️ Fredagslunsj (+15%)
                     </button>
-                    <button type="button" data-boost="-15" className="boost-chip px-2.5 py-1 rounded-lg bg-white/5 hover:bg-rose-400/20 border border-white/10 text-[11px] text-[var(--foam)]/85 cursor-pointer transition-all">
+                    <button
+                      type="button"
+                      data-boost="-15"
+                      className="boost-chip px-2.5 py-1 rounded-lg bg-white/5 hover:bg-rose-400/20 border border-white/10 text-[11px] text-[var(--foam)]/85 cursor-pointer transition-all"
+                    >
                       🚨 Prod-brann (-15%)
                     </button>
                   </div>
@@ -1227,77 +1770,136 @@ export default function Tide({ initial }: { initial: Reading }) {
                   <span className="w-3 h-0.5 bg-amber-400 inline-block"></span>
                   <span>Stiplet linje = Offisiell Oslo-indeks</span>
                 </span>
-                <button id="btn-reset-personal" type="button" className="text-amber-300 hover:underline cursor-pointer">Nullstill</button>
+                <button
+                  id="btn-reset-personal"
+                  type="button"
+                  className="text-amber-300 hover:underline cursor-pointer"
+                >
+                  Nullstill
+                </button>
               </div>
             </aside>
 
             {/* PANEL B: COMPANY & DEPARTMENT FLEET (Mode: company) */}
-            <aside id="panel-company" className="hidden pointer-events-auto glass-panel rounded-2xl p-4 sm:p-5 w-full max-w-md ml-auto space-y-3.5">
+            <aside
+              id="panel-company"
+              className="hidden pointer-events-auto glass-panel rounded-2xl p-4 sm:p-5 w-full max-w-md ml-auto space-y-3.5"
+            >
               <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono-tabular uppercase tracking-wider text-teal-300">Bedriftsflåte · Puls</span>
-                    <span className="text-[10px] font-mono-tabular px-1.5 py-[0.1rem] rounded bg-teal-500/20 text-teal-200 border border-teal-400/30">42 innsjekket</span>
+                    <span className="text-[10px] font-mono-tabular uppercase tracking-wider text-teal-300">
+                      Bedriftsflåte · Puls
+                    </span>
+                    <span className="text-[10px] font-mono-tabular px-1.5 py-[0.1rem] rounded bg-teal-500/20 text-teal-200 border border-teal-400/30">
+                      42 innsjekket
+                    </span>
                   </div>
-                  <h2 className="text-sm font-bold text-[var(--foam)] mt-0.5">Avdelinger på bølgene</h2>
+                  <h2 className="text-sm font-bold text-[var(--foam)] mt-0.5">
+                    Avdelinger på bølgene
+                  </h2>
                 </div>
-                <button id="btn-checkin-pulse" type="button" className="px-2.5 py-1.5 rounded-xl bg-teal-400 text-slate-950 font-bold text-xs hover:bg-teal-300 transition-all cursor-pointer shadow">
+                <button
+                  id="btn-checkin-pulse"
+                  type="button"
+                  className="px-2.5 py-1.5 rounded-xl bg-teal-400 text-slate-950 font-bold text-xs hover:bg-teal-300 transition-all cursor-pointer shadow"
+                >
                   + Sjekk inn min puls
                 </button>
               </div>
 
               <p className="text-[11px] text-[var(--foam)]/65 leading-relaxed m-0">
-                Hver avdeling flyter som en egen bøye på havoverflaten. Klikk på en avdeling for å inspisere deres tidevann, eller sammenlign hvem som trenger fredagskake.
+                Hver avdeling flyter som en egen bøye på havoverflaten. Klikk på
+                en avdeling for å inspisere deres tidevann, eller sammenlign
+                hvem som trenger fredagskake.
               </p>
 
               {/* Department List */}
-              <div id="dept-list" className="space-y-2 max-h-52 overflow-y-auto pr-1"></div>
+              <div
+                id="dept-list"
+                className="space-y-2 max-h-52 overflow-y-auto pr-1"
+              ></div>
 
               {/* Slack / Teams status integration preview */}
               <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-[var(--foam)]/60 font-mono-tabular">
                 <span>Slack: #helgefølelse-puls</span>
-                <span id="company-spread-label" className="text-teal-200">Spredning: 18%</span>
+                <span id="company-spread-label" className="text-teal-200">
+                  Spredning: 18%
+                </span>
               </div>
             </aside>
 
             {/* PANEL C: AESTHETIC & MOTION THEMES (Mode: vibe) */}
-            <aside id="panel-vibe" className="hidden pointer-events-auto glass-panel rounded-2xl p-4 sm:p-5 w-full max-w-sm ml-auto space-y-3.5">
+            <aside
+              id="panel-vibe"
+              className="hidden pointer-events-auto glass-panel rounded-2xl p-4 sm:p-5 w-full max-w-sm ml-auto space-y-3.5"
+            >
               <div className="border-b border-white/10 pb-2.5">
-                <span className="text-[10px] font-mono-tabular uppercase tracking-wider text-teal-300 block">Designretninger</span>
-                <h2 className="text-sm font-bold text-[var(--foam)]">Velg visuell atmosfære</h2>
+                <span className="text-[10px] font-mono-tabular uppercase tracking-wider text-teal-300 block">
+                  Designretninger
+                </span>
+                <h2 className="text-sm font-bold text-[var(--foam)]">
+                  Velg visuell atmosfære
+                </h2>
               </div>
 
               <div className="space-y-2 text-xs">
-                <button type="button" data-theme="nordic-sea" className="theme-card w-full text-left p-3 rounded-xl bg-white/10 border border-teal-400/50 hover:bg-white/15 transition-all cursor-pointer flex items-center justify-between">
+                <button
+                  type="button"
+                  data-theme="nordic-sea"
+                  className="theme-card w-full text-left p-3 rounded-xl bg-white/10 border border-teal-400/50 hover:bg-white/15 transition-all cursor-pointer flex items-center justify-between"
+                >
                   <div>
-                    <div className="font-bold text-[var(--foam)]">1. Nordisk Hav (Original+)</div>
-                    <div className="text-[11px] text-[var(--foam)]/65">Dyp sjøgrønn, skumhvit typografi og bioluminescens.</div>
+                    <div className="font-bold text-[var(--foam)]">
+                      1. Nordisk Hav (Original+)
+                    </div>
+                    <div className="text-[11px] text-[var(--foam)]/65">
+                      Dyp sjøgrønn, skumhvit typografi og bioluminescens.
+                    </div>
                   </div>
                   <span className="w-4 h-4 rounded-full bg-[#17a39b] border border-white/40 shrink-0"></span>
                 </button>
 
-                <button type="button" data-theme="hygge" className="theme-card w-full text-left p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 transition-all cursor-pointer flex items-center justify-between">
+                <button
+                  type="button"
+                  data-theme="hygge"
+                  className="theme-card w-full text-left p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 transition-all cursor-pointer flex items-center justify-between"
+                >
                   <div>
-                    <div className="font-bold text-amber-200">2. Fredagspils & Hyttelykt</div>
-                    <div className="text-[11px] text-[var(--foam)]/65">Varm gyllen rav, peisglød og roligere dønninger.</div>
+                    <div className="font-bold text-amber-200">
+                      2. Fredagspils & Hyttelykt
+                    </div>
+                    <div className="text-[11px] text-[var(--foam)]/65">
+                      Varm gyllen rav, peisglød og roligere dønninger.
+                    </div>
                   </div>
                   <span className="w-4 h-4 rounded-full bg-amber-500 border border-white/40 shrink-0"></span>
                 </button>
 
-                <button type="button" data-theme="sonar" className="theme-card w-full text-left p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 transition-all cursor-pointer flex items-center justify-between">
+                <button
+                  type="button"
+                  data-theme="sonar"
+                  className="theme-card w-full text-left p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/15 transition-all cursor-pointer flex items-center justify-between"
+                >
                   <div>
-                    <div className="font-bold text-cyan-300">3. Bathysphere Instrument</div>
-                    <div className="text-[11px] text-[var(--foam)]/65">Teknisk sonar-rutenett, presisjonsmåler og skarp cyan.</div>
+                    <div className="font-bold text-cyan-300">
+                      3. Bathysphere Instrument
+                    </div>
+                    <div className="text-[11px] text-[var(--foam)]/65">
+                      Teknisk sonar-rutenett, presisjonsmåler og skarp cyan.
+                    </div>
                   </div>
                   <span className="w-4 h-4 rounded-full bg-cyan-400 border border-white/40 shrink-0"></span>
                 </button>
               </div>
             </aside>
-
           </div>
 
           {/* Center Interactive Hint (Fades out after interaction) */}
-          <div id="ripple-hint" className="self-center pointer-events-none transition-opacity duration-1000 opacity-60 text-center mt-auto mb-3">
+          <div
+            id="ripple-hint"
+            className="self-center pointer-events-none transition-opacity duration-1000 opacity-60 text-center mt-auto mb-3"
+          >
             <span className="text-[11px] font-mono-tabular uppercase tracking-widest px-3 py-1 rounded-full bg-black/20 border border-white/10 text-[var(--foam)]/80">
               Dra i vannoverflaten for krusninger · Bytt konsept i toppmenyen
             </span>
@@ -1305,9 +1907,11 @@ export default function Tide({ initial }: { initial: Reading }) {
 
           {/* Bottom Telemetry & Time-Travel Scrubber Dock */}
           <footer className="pointer-events-auto flex flex-col gap-3 max-w-4xl w-full mx-auto">
-
             {/* Expandable Week Curve Mini-Graph Card */}
-            <div id="curve-drawer" className="glass-panel rounded-2xl p-4 sm:p-5 transition-all duration-300 hidden">
+            <div
+              id="curve-drawer"
+              className="glass-panel rounded-2xl p-4 sm:p-5 transition-all duration-300 hidden"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div>
                   <h2 className="text-sm font-bold text-[var(--foam)] flex items-center gap-2">
@@ -1317,24 +1921,50 @@ export default function Tide({ initial }: { initial: Reading }) {
                     </span>
                   </h2>
                   <p className="text-xs text-[var(--foam)]/65 mt-0.5">
-                    Fra mandag 00:00 stiger vannet eksponentielt mot fredag kl. 16:00, holder seg 100 % gjennom lørdagen, og trekker seg brått tilbake søndag kveld.
+                    Fra mandag 00:00 stiger vannet eksponentielt mot fredag kl.
+                    16:00, holder seg 100 % gjennom lørdagen, og trekker seg
+                    brått tilbake søndag kveld.
                   </p>
                 </div>
-                <button id="btn-close-drawer" type="button" className="text-xs text-[var(--foam)]/60 hover:text-[var(--foam)] px-2 py-1 rounded-lg">
+                <button
+                  id="btn-close-drawer"
+                  type="button"
+                  className="text-xs text-[var(--foam)]/60 hover:text-[var(--foam)] px-2 py-1 rounded-lg"
+                >
                   Lukk ✕
                 </button>
               </div>
               {/* Interactive SVG Curve Map */}
-              <div className="relative w-full h-28 sm:h-32 bg-black/25 rounded-xl border border-white/10 p-2 overflow-hidden cursor-crosshair" id="curve-chart-box">
-                <svg id="week-curve-svg" viewBox="0 0 700 120" preserveAspectRatio="none" className="w-full h-full overflow-visible">
+              <div
+                className="relative w-full h-28 sm:h-32 bg-black/25 rounded-xl border border-white/10 p-2 overflow-hidden cursor-crosshair"
+                id="curve-chart-box"
+              >
+                <svg
+                  id="week-curve-svg"
+                  viewBox="0 0 700 120"
+                  preserveAspectRatio="none"
+                  className="w-full h-full overflow-visible"
+                >
                   <defs>
                     <linearGradient id="curve-fill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#17a39b" stopOpacity="0.45" />
-                      <stop offset="100%" stopColor="#17a39b" stopOpacity="0.0" />
+                      <stop
+                        offset="0%"
+                        stopColor="#17a39b"
+                        stopOpacity="0.45"
+                      />
+                      <stop
+                        offset="100%"
+                        stopColor="#17a39b"
+                        stopOpacity="0.0"
+                      />
                     </linearGradient>
                   </defs>
                   {/* Day dividers */}
-                  <g stroke="rgba(233,246,242,0.08)" strokeWidth="1" strokeDasharray="3 3">
+                  <g
+                    stroke="rgba(233,246,242,0.08)"
+                    strokeWidth="1"
+                    strokeDasharray="3 3"
+                  >
                     <line x1="100" y1="0" x2="100" y2="120" />
                     <line x1="200" y1="0" x2="200" y2="120" />
                     <line x1="300" y1="0" x2="300" y2="120" />
@@ -1343,12 +1973,42 @@ export default function Tide({ initial }: { initial: Reading }) {
                     <line x1="600" y1="0" x2="600" y2="120" />
                   </g>
                   <path id="week-curve-area" fill="url(#curve-fill)" d="" />
-                  <path id="week-curve-path" fill="none" stroke="#2dd4bf" strokeWidth="2.5" strokeLinecap="round" d="" />
-                  <line id="week-curve-cursor" x1="0" y1="0" x2="0" y2="120" stroke="#e9f6f2" strokeWidth="1.5" strokeDasharray="2 2" />
-                  <circle id="week-curve-dot" cx="0" cy="0" r="5" fill="#e9f6f2" stroke="#17a39b" strokeWidth="2.5" />
+                  <path
+                    id="week-curve-path"
+                    fill="none"
+                    stroke="#2dd4bf"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    d=""
+                  />
+                  <line
+                    id="week-curve-cursor"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="120"
+                    stroke="#e9f6f2"
+                    strokeWidth="1.5"
+                    strokeDasharray="2 2"
+                  />
+                  <circle
+                    id="week-curve-dot"
+                    cx="0"
+                    cy="0"
+                    r="5"
+                    fill="#e9f6f2"
+                    stroke="#17a39b"
+                    strokeWidth="2.5"
+                  />
                 </svg>
                 <div className="absolute bottom-1.5 left-0 right-0 grid grid-cols-7 text-center text-[10px] font-mono-tabular text-[var(--foam)]/55 pointer-events-none">
-                  <span>Man</span><span>Tir</span><span>Ons</span><span>Tor</span><span>Fre 16:00</span><span>Lør</span><span>Søn</span>
+                  <span>Man</span>
+                  <span>Tir</span>
+                  <span>Ons</span>
+                  <span>Tor</span>
+                  <span>Fre 16:00</span>
+                  <span>Lør</span>
+                  <span>Søn</span>
                 </div>
               </div>
             </div>
@@ -1358,15 +2018,27 @@ export default function Tide({ initial }: { initial: Reading }) {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 {/* Current Depth Band & Trend */}
                 <div className="flex items-center gap-3">
-                  <div id="band-badge" className="px-3 py-1.5 rounded-xl bg-teal-500/20 border border-teal-300/30 text-teal-100 font-bold text-sm sm:text-base tracking-tight flex items-center gap-2">
-                    <span id="band-dot" className="w-2 h-2 rounded-full bg-teal-300"></span>
+                  <div
+                    id="band-badge"
+                    className="px-3 py-1.5 rounded-xl bg-teal-500/20 border border-teal-300/30 text-teal-100 font-bold text-sm sm:text-base tracking-tight flex items-center gap-2"
+                  >
+                    <span
+                      id="band-dot"
+                      className="w-2 h-2 rounded-full bg-teal-300"
+                    ></span>
                     <span id="band-name">Ankeldypt</span>
                   </div>
                   <div className="flex flex-col">
-                    <span id="trend-label" className="text-xs sm:text-sm font-semibold text-[var(--foam)] flex items-center gap-1.5">
+                    <span
+                      id="trend-label"
+                      className="text-xs sm:text-sm font-semibold text-[var(--foam)] flex items-center gap-1.5"
+                    >
                       Flommer inn mot helg
                     </span>
-                    <span id="countdown-label" className="text-[11px] font-mono-tabular text-[var(--foam)]/65">
+                    <span
+                      id="countdown-label"
+                      className="text-[11px] font-mono-tabular text-[var(--foam)]/65"
+                    >
                       Beregner tid til helg...
                     </span>
                   </div>
@@ -1375,11 +2047,22 @@ export default function Tide({ initial }: { initial: Reading }) {
                 {/* Velocity & Reset to Live button */}
                 <div className="flex items-center gap-2.5 ml-auto">
                   <div className="hidden md:flex flex-col items-end pr-2 border-r border-white/10">
-                    <span className="text-[10px] uppercase tracking-wider text-[var(--foam)]/50 font-mono-tabular">Tidevannsfart</span>
-                    <span id="velocity-readout" className="text-xs font-mono-tabular text-teal-200 font-medium">+0.00 %/t</span>
+                    <span className="text-[10px] uppercase tracking-wider text-[var(--foam)]/50 font-mono-tabular">
+                      Tidevannsfart
+                    </span>
+                    <span
+                      id="velocity-readout"
+                      className="text-xs font-mono-tabular text-teal-200 font-medium"
+                    >
+                      +0.00 %/t
+                    </span>
                   </div>
 
-                  <button id="btn-reset-live" type="button" className="hidden px-3 py-1.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs hover:bg-emerald-400 transition-all cursor-pointer shadow-lg shadow-emerald-950/50 items-center gap-1.5">
+                  <button
+                    id="btn-reset-live"
+                    type="button"
+                    className="hidden px-3 py-1.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs hover:bg-emerald-400 transition-all cursor-pointer shadow-lg shadow-emerald-950/50 items-center gap-1.5"
+                  >
                     <span className="w-2 h-2 rounded-full bg-slate-950 animate-ping"></span>
                     <span>Tilbake til nåtid</span>
                   </button>
@@ -1388,15 +2071,57 @@ export default function Tide({ initial }: { initial: Reading }) {
 
               {/* Interactive Time Scrubber */}
               <div className="flex items-center gap-3 pt-1 border-t border-white/10">
-                <span className="text-[11px] font-mono-tabular text-[var(--foam)]/60 shrink-0 w-16" id="scrubber-day-label">Man 00:00</span>
+                <span
+                  className="text-[11px] font-mono-tabular text-[var(--foam)]/60 shrink-0 w-16"
+                  id="scrubber-day-label"
+                >
+                  Man 00:00
+                </span>
                 <div className="relative flex-1 flex items-center">
-                  <input id="time-scrubber" type="range" min="0" max="168" step="0.05" defaultValue="0" className="tide-slider" aria-label="Tidsmaskin gjennom uken" />
+                  <input
+                    id="time-scrubber"
+                    type="range"
+                    min="0"
+                    max="168"
+                    step="0.05"
+                    defaultValue="0"
+                    className="tide-slider"
+                    aria-label="Tidsmaskin gjennom uken"
+                  />
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button type="button" data-preset="4.5" className="preset-btn text-[10px] font-mono-tabular px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[var(--foam)]/75 transition-colors cursor-pointer" title="Mandag morgen kl 08:30">Man</button>
-                  <button type="button" data-preset="65" className="preset-btn text-[10px] font-mono-tabular px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[var(--foam)]/75 transition-colors cursor-pointer" title="Onsdag ettermiddag kl 17:00">Ons</button>
-                  <button type="button" data-preset="112" className="preset-btn text-[10px] font-mono-tabular px-2 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/35 text-teal-200 border border-teal-400/20 transition-colors cursor-pointer" title="Fredag kl 16:00 — Full helg!">Fre 16</button>
-                  <button type="button" data-preset="162" className="preset-btn text-[10px] font-mono-tabular px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[var(--foam)]/75 transition-colors cursor-pointer" title="Søndag kveld kl 18:00">Søn</button>
+                  <button
+                    type="button"
+                    data-preset="4.5"
+                    className="preset-btn text-[10px] font-mono-tabular px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[var(--foam)]/75 transition-colors cursor-pointer"
+                    title="Mandag morgen kl 08:30"
+                  >
+                    Man
+                  </button>
+                  <button
+                    type="button"
+                    data-preset="65"
+                    className="preset-btn text-[10px] font-mono-tabular px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[var(--foam)]/75 transition-colors cursor-pointer"
+                    title="Onsdag ettermiddag kl 17:00"
+                  >
+                    Ons
+                  </button>
+                  <button
+                    type="button"
+                    data-preset="112"
+                    className="preset-btn text-[10px] font-mono-tabular px-2 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/35 text-teal-200 border border-teal-400/20 transition-colors cursor-pointer"
+                    title="Fredag kl 16:00 — Full helg!"
+                  >
+                    Fre 16
+                  </button>
+                  <button
+                    type="button"
+                    data-preset="162"
+                    className="preset-btn text-[10px] font-mono-tabular px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[var(--foam)]/75 transition-colors cursor-pointer"
+                    title="Søndag kveld kl 18:00"
+                  >
+                    Søn
+                  </button>
                 </div>
               </div>
             </div>
