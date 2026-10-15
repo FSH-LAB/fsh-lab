@@ -57,16 +57,6 @@ export default function Tide({ initial }: { initial: Reading }) {
       },
     };
 
-    const WEEKDAY_NAMES_NO = [
-      "",
-      "Mandag",
-      "Tirsdag",
-      "Onsdag",
-      "Torsdag",
-      "Fredag",
-      "Lørdag",
-      "Søndag",
-    ];
     const WEEKDAY_SHORT_NO = [
       "",
       "Man",
