@@ -4,7 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   APP_SLUG_REGEX,
-  infraSchema,
   validateInfraManifest,
 } from "./schema.js";
 
