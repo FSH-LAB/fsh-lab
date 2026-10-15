@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Vertify Infrastructure
+    name: Verify Infrastructure
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
