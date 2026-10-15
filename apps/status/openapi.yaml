@@ -1,0 +1,578 @@
+openapi: 3.1.0
+info:
+  title: FSH Lab Status API
+  version: 1.0.0
+  description: |
+    Production-grade RESTful API for monitoring system availability, health probes,
+    telemetry, and active incident status across the FSH Lab ecosystem.
+  contact:
+    name: FSH Lab Operations
+    url: https://github.com/FSH-LAB/fsh-lab
+servers:
+  - url: https://status.fsh-lab.dev
+    description: Production environment
+  - url: http://localhost:3001
+    description: Local development server
+
+paths:
+  /api/v1/status:
+    get:
+      summary: Get system status summary
+      description: Returns the global system operational status, aggregate uptime, and component counts.
+      operationId: getSystemStatus
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatchHeader"
+      responses:
+        "200":
+          description: System status successfully retrieved.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETagHeader"
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlHeader"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemStatusEnvelope"
+        "304":
+          $ref: "#/components/responses/NotModifiedResponse"
+    head:
+      summary: Inspect status metadata and ETag
+      description: Returns the same headers as GET without transferring the response body.
+      operationId: headSystemStatus
+      responses:
+        "200":
+          description: Headers returned successfully.
+    options:
+      summary: Retrieve allowed HTTP methods for status
+      operationId: optionsSystemStatus
+      responses:
+        "204":
+          description: Allowed methods returned in Allow header.
+
+  /api/v1/services:
+    get:
+      summary: List all monitored services
+      description: Retrieves the collection of all monitored applications and services with latency and 90-day uptime.
+      operationId: listServices
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatchHeader"
+      responses:
+        "200":
+          description: Monitored services retrieved successfully.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETagHeader"
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlHeader"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServicesCollectionEnvelope"
+        "304":
+          $ref: "#/components/responses/NotModifiedResponse"
+    head:
+      summary: Inspect services metadata
+      operationId: headServices
+      responses:
+        "200":
+          description: Headers returned successfully.
+    options:
+      summary: Retrieve allowed HTTP methods for services
+      operationId: optionsServices
+      responses:
+        "204":
+          description: Allowed methods returned in Allow header.
+
+  /api/v1/services/{id}:
+    get:
+      summary: Get service details by ID
+      description: Retrieves details, active status, telemetry, and uptime history for a specific service.
+      operationId: getServiceById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique service identifier (e.g. `helgefolelse`, `status`).
+          schema:
+            type: string
+        - name: days
+          in: query
+          required: false
+          description: Number of days of persistent uptime history to retrieve from BigQuery (e.g. 90, 180, 365).
+          schema:
+            type: integer
+            default: 90
+            minimum: 1
+            maximum: 3650
+        - $ref: "#/components/parameters/IfNoneMatchHeader"
+      responses:
+        "200":
+          description: Service details retrieved successfully.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETagHeader"
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlHeader"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceItemEnvelope"
+        "304":
+          $ref: "#/components/responses/NotModifiedResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundProblemResponse"
+    head:
+      summary: Inspect single service metadata
+      operationId: headServiceById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Headers returned.
+        "404":
+          description: Service not found.
+    options:
+      summary: Retrieve allowed HTTP methods for single service
+      operationId: optionsServiceById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Allowed methods returned in Allow header.
+
+  /api/v1/services/probe:
+    get:
+      summary: Trigger synthetic health probe across all services
+      description: Executes real-time HTTP probes against registered `/api/health` endpoints and returns measured latencies.
+      operationId: probeAllServices
+      responses:
+        "200":
+          description: All monitored services are healthy and responded with 2xx.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeCollectionEnvelope"
+        "503":
+          description: One or more services are unreachable, timed out, or returned an error status.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+    head:
+      summary: Check probe availability
+      operationId: headProbeAll
+      responses:
+        "200":
+          description: Probe endpoint available.
+    options:
+      summary: Retrieve allowed HTTP methods for probe
+      operationId: optionsProbeAll
+      responses:
+        "204":
+          description: Allowed methods returned.
+
+  /api/v1/services/{id}/probe:
+    get:
+      summary: Probe a specific service by ID
+      description: Probes the `/api/health` endpoint of a single service and returns the measured latency and status.
+      operationId: probeServiceById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Service probe responded operational.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeItemEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFoundProblemResponse"
+        "503":
+          description: Service is degraded or unreachable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+    head:
+      summary: Check single service probe
+      operationId: headProbeServiceById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Probe available.
+    options:
+      summary: Retrieve allowed methods
+      operationId: optionsProbeServiceById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Allowed methods returned.
+
+  /api/v1/incidents:
+    get:
+      summary: List incidents
+      description: Retrieves a collection of active or resolved incidents.
+      operationId: listIncidents
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter incidents by status (`active` or `resolved`).
+          schema:
+            type: string
+            enum: [active, resolved]
+        - $ref: "#/components/parameters/IfNoneMatchHeader"
+      responses:
+        "200":
+          description: Incidents list retrieved.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETagHeader"
+            Cache-Control:
+              $ref: "#/components/headers/CacheControlHeader"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentsCollectionEnvelope"
+        "304":
+          $ref: "#/components/responses/NotModifiedResponse"
+    head:
+      summary: Inspect incidents metadata
+      operationId: headIncidents
+      responses:
+        "200":
+          description: Headers returned.
+    options:
+      summary: Retrieve allowed methods
+      operationId: optionsIncidents
+      responses:
+        "204":
+          description: Allowed methods returned.
+
+  /api/v1/incidents/{id}:
+    get:
+      summary: Get incident by ID
+      description: Retrieves a single incident post-mortem with update timeline.
+      operationId: getIncidentById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IfNoneMatchHeader"
+      responses:
+        "200":
+          description: Incident retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentItemEnvelope"
+        "304":
+          $ref: "#/components/responses/NotModifiedResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundProblemResponse"
+
+  /api/health:
+    get:
+      summary: Platform health check
+      description: Standard operational readiness and liveness check for container orchestrators.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, ready, uptime]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  ready:
+                    type: boolean
+                    example: true
+                  uptime:
+                    type: number
+                    example: 18420.5
+
+components:
+  parameters:
+    IfNoneMatchHeader:
+      name: If-None-Match
+      in: header
+      required: false
+      description: ETag from a previous response. If matching, the server returns `304 Not Modified`.
+      schema:
+        type: string
+
+  headers:
+    ETagHeader:
+      description: Weak HTTP entity tag representing the resource version.
+      schema:
+        type: string
+        example: W/"abc12345"
+    CacheControlHeader:
+      description: Directives for caching mechanisms.
+      schema:
+        type: string
+        example: public, max-age=15, stale-while-revalidate=30
+
+  responses:
+    NotModifiedResponse:
+      description: Resource has not changed since the specified ETag. No response body is returned.
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETagHeader"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControlHeader"
+
+    NotFoundProblemResponse:
+      description: The requested resource was not found.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+
+  schemas:
+    ProblemDetails:
+      type: object
+      description: RFC 7807 problem details specification.
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          format: uri
+          example: https://status.fsh-lab.dev/problems/not-found
+        title:
+          type: string
+          example: Not Found
+        status:
+          type: integer
+          example: 404
+        detail:
+          type: string
+          example: Service with ID 'unknown-service' does not exist.
+        instance:
+          type: string
+          example: /api/v1/services/unknown-service
+
+    SystemStatusEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required:
+            - status
+            - indicator
+            - overallUptime90d
+            - operationalServicesCount
+            - totalServicesCount
+            - lastChecked
+          properties:
+            status:
+              type: string
+              example: All Systems Operational
+            indicator:
+              type: string
+              enum: [none, minor, major, critical, maintenance]
+              example: none
+            overallUptime90d:
+              type: number
+              example: 100.0
+            operationalServicesCount:
+              type: integer
+              example: 2
+            totalServicesCount:
+              type: integer
+              example: 2
+            lastChecked:
+              type: string
+              format: date-time
+              example: 2026-10-14T14:00:00.000Z
+
+    ServicesCollectionEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceComponent"
+
+    ServiceItemEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/ServiceComponent"
+
+    ServiceComponent:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - uptime90d
+        - currentLatencyMs
+      properties:
+        id:
+          type: string
+          example: helgefolelse
+        name:
+          type: string
+          example: Helgefølelse
+        status:
+          type: string
+          enum:
+            [
+              operational,
+              degraded_performance,
+              partial_outage,
+              major_outage,
+              maintenance,
+            ]
+          example: operational
+        uptime90d:
+          type: number
+          example: 100.0
+        currentLatencyMs:
+          type: integer
+          example: 35
+        appUrl:
+          type: string
+          format: uri
+          example: https://helgefolelse.no
+
+    ProbeCollectionEnvelope:
+      type: object
+      required: [status, results, probedAt]
+      properties:
+        status:
+          type: string
+          example: ok
+        probedAt:
+          type: string
+          format: date-time
+        results:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ProbeResult"
+
+    ProbeItemEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/ProbeResult"
+
+    ProbeResult:
+      type: object
+      required: [id, name, status, latencyMs]
+      properties:
+        id:
+          type: string
+          example: helgefolelse
+        name:
+          type: string
+          example: Helgefølelse
+        status:
+          type: string
+          example: operational
+        latencyMs:
+          type: integer
+          example: 28
+        statusCode:
+          type: integer
+          example: 200
+        timestamp:
+          type: string
+          format: date-time
+
+    IncidentsCollectionEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Incident"
+
+    IncidentItemEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Incident"
+
+    Incident:
+      type: object
+      required:
+        [id, title, impact, status, affectedServiceIds, createdAt, updates]
+      properties:
+        id:
+          type: string
+          example: inc-2026-001
+        title:
+          type: string
+          example: Database connection latency
+        impact:
+          type: string
+          enum: [none, minor, major, critical]
+          example: minor
+        status:
+          type: string
+          enum: [investigating, identified, monitoring, resolved]
+          example: resolved
+        affectedServiceIds:
+          type: array
+          items:
+            type: string
+          example: [helgefolelse]
+        createdAt:
+          type: string
+          format: date-time
+        updates:
+          type: array
+          items:
+            type: object
+            required: [id, status, message, timestamp]
+            properties:
+              id:
+                type: string
+              status:
+                type: string
+              message:
+                type: string
+              timestamp:
+                type: string
+                format: date-time

@@ -1,0 +1,13 @@
+{
+  "displayName": "Status",
+  "public": true,
+  "cpu": "1000m",
+  "memory": "512Mi",
+  "minInstances": 0,
+  "maxInstances": 3,
+  "env": {
+    "BIGQUERY_DATASET": "uptime_monitoring",
+    "HELGEFOLELSE_HEALTH_URL": "https://helgefolelse.no/api/health",
+    "HELGEFOLELSE_URL": "https://helgefolelse.no"
+  }
+}

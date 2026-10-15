@@ -4,6 +4,9 @@ import { test } from "node:test";
 
 const baseUrl = process.env.SMOKE_URL;
 const commit = process.env.SHA;
+const authToken = process.env.SMOKE_TOKEN || process.env.SMOKE_AUTH_TOKEN;
+const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+
 assert.ok(baseUrl, "SMOKE_URL must point to a running app");
 assert.match(commit ?? "", /^[0-9a-f]{40}$/, "SHA must be a full commit SHA");
 
@@ -11,6 +14,7 @@ async function request(path) {
   for (let attempt = 0; ; attempt++) {
     try {
       const response = await fetch(new URL(path, baseUrl), {
+        headers,
         signal: AbortSignal.timeout(5_000),
       });
       assert.equal(response.status, 200, `${path} must return HTTP 200`);
@@ -28,7 +32,7 @@ test(
   async () => {
     const data = JSON.parse(await request("/api/health"));
     assert.equal(data.status, "ok");
-    assert.equal(data.commit, commit);
+    assert.equal(data.commit ?? data.sha, commit);
     assert.equal(data.ready, true);
   },
 );
