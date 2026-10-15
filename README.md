@@ -6,10 +6,9 @@ A unified monorepo hosting side projects, learning prototypes, and production ap
 
 ### Applications (`apps/`)
 
-| Application                         | Description                                                      | Stack                              | Status     |
-| ----------------------------------- | ---------------------------------------------------------------- | ---------------------------------- | ---------- |
-| [`helgefolelse`](apps/helgefolelse) | A weekend feeling tracker in `Europe/Oslo` time                  | Next.js 16, React 19, Tailwind CSS | Production |
-| [`status`](apps/status)             | Real-time system status, uptime monitoring, and incident history | Next.js 16, React 19, Tailwind CSS | Production |
+| Application                         | Description                                     | Stack                              | Status     |
+| ----------------------------------- | ----------------------------------------------- | ---------------------------------- | ---------- |
+| [`helgefolelse`](apps/helgefolelse) | A weekend feeling tracker in `Europe/Oslo` time | Next.js 16, React 19, Tailwind CSS | Production |
 
 ### Shared Packages (`packages/`)
 
@@ -60,23 +59,50 @@ SMOKE_URL=http://localhost:8080 SHA="$(git rev-parse HEAD)" pnpm --filter helgef
 
 ## Adding a New Application
 
-Adding a new application is powered by zero-touch GitOps discovery:
+1. **Scaffold the App**:
+   Create a new directory under `apps/<app-name>` with its `package.json` and `Dockerfile`.
+2. **Link Shared Configs**:
+   Add workspace dependencies in its `package.json`:
+   ```json
+   {
+     "devDependencies": {
+       "@repo/eslint-config": "workspace:*",
+       "@repo/typescript-config": "workspace:*"
+     }
+   }
+   ```
+3. **Declare Infrastructure**:
+   In `infra/main.tf`, instantiate the reusable Cloud Run module:
+   ```hcl
+   module "<app-name>" {
+     source         = "./modules/cloud-run-app"
+     app            = "<app-name>"
+     display_name   = "<Display Name>"
+     project_id     = google_project.environment.project_id
+     region         = local.region
+     deployer_email = google_service_account.deployer.email
+   }
+   ```
+4. **Privileged Infrastructure Rollout (Operator Pre-Apply)**:
+   Because the automated CI deployer intentionally adheres to least privilege and cannot administer service accounts or IAM policies ([`infra/main.tf`](infra/main.tf) and [`infra/README.md`](infra/README.md)), an operator must run `terraform apply` with operator credentials for each environment (`dev`, `production`) before merging:
+   ```sh
+   ENV=dev # and production
+   PROJECT=$(sed -n 's/^project_id *= *"\(.*\)"/\1/p' "infra/environments/$ENV.tfvars")
+   export TF_DATA_DIR="$PWD/infra/.terraform/$ENV"
 
-1. **Create the Application Directory**:
-   Create `apps/<name>` containing `infra.json`, `package.json`, `/api/health`, and `tests/smoke.mjs` (see [`.agents/skills/add-app/SKILL.md`](.agents/skills/add-app/SKILL.md) for the universal boundary contracts and runbook).
-
-2. **Open a Pull Request**:
-   - `ci.yml` lints, typechecks, tests, and builds changed packages via Turborepo, and validates Terraform configurations and infrastructure assertions.
-
-3. **Merge to `main`**:
-   - `infra.yml` provisions the Cloud Run service shell with the initial placeholder image via scoped infrastructure automation.
-   - `cd.yml` dynamically detects the changed application via Turborepo, builds the production container using the centralized root `Dockerfile` (`gcr.io/distroless/nodejs24-debian12:nonroot`), runs candidate revision smoke tests, and promotes traffic.
-
-No manual `.tf` edits, per-app workflows, or operator pre-apply steps are required.
+   terraform -chdir=infra init -reconfigure \
+     -backend-config="bucket=$PROJECT-terraform-state" \
+     -backend-config="prefix=helgefolelse/$ENV"
+   terraform -chdir=infra plan \
+     -var-file="environments/$ENV.tfvars" -out="$ENV.tfplan"
+   terraform -chdir=infra apply "$ENV.tfplan"
+   ```
+5. **Wire Deployment Pipeline**:
+   Add `.github/workflows/deploy-<app-name>.yml` triggering on `apps/<app-name>/**`, shared packages, and root build configuration (`pnpm-lock.yaml`, etc.), calling `.github/workflows/release-app.yml` with `app: <app-name>`.
 
 ## Architecture & CI/CD
 
-- **CI (`.github/workflows/ci.yml`)**: Runs on pull requests and pushes to `main`. Leverages Turborepo affected filtering (`--affected`) and remote/workflow action caching to test changed packages and their dependents rapidly.
-- **CD (`.github/workflows/cd.yml` -> `_cd-app.yml` -> `.github/actions/cloud-run-rollout`)**: Dynamic matrix orchestrator detects affected apps under `apps/*`, builds minimal Distroless containers with BuildKit caching, scans with Trivy, attests provenance, and deploys to Google Cloud Run across `dev` and `production` (with manual rollbacks enabled via `rollback.yml`).
+- **CI (`.github/workflows/ci.yml`)**: Runs on pull requests and pushes to `main`. Leverages Turborepo affected filtering (`--affected`) on pull requests to only test changed packages and their dependents, keeping verification fast as the monorepo expands.
+- **CD (`.github/workflows/deploy-*.yml` -> `release-app.yml` -> `cd.yml`)**: App-scoped pipelines build, scan with Trivy, attest provenance, and deploy container images to Google Cloud Run across `dev` and `production` environments.
 - **Candidate Verification**: Deployments roll out to a tagged `--no-traffic` candidate revision first, run automated smoke tests against the candidate URL, and only promote traffic to 100% upon success.
-- **Infrastructure (`infra/`)**: Reusable Terraform modules (`infra/modules/cloud-run-app`) with auto-discovery of `apps/*/infra.json` manifests deployed via `.github/workflows/infra.yml`. Workload Identity Federation (WIF) eliminates long-lived service account keys.
+- **Infrastructure (`infra/`)**: Reusable Terraform modules (`infra/modules/cloud-run-app`) deployed via `.github/workflows/infra.yml`. Workload Identity Federation (WIF) eliminates long-lived service account keys.

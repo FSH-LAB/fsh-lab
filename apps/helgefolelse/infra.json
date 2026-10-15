@@ -1,8 +1,0 @@
-{
-  "displayName": "Helgefølelse",
-  "public": true,
-  "cpu": "1000m",
-  "memory": "512Mi",
-  "minInstances": 0,
-  "maxInstances": 3
-}

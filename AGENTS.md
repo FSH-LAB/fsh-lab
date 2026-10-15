@@ -6,12 +6,9 @@ Monorepo managed with **pnpm** workspaces and **Turborepo**, hosting independent
 
 - `apps/*` — Standalone applications and services. Each application is independently deployable and isolated:
   - `apps/helgefolelse` — Next.js web application.
-  - `apps/status` — Next.js system status and uptime monitoring dashboard.
 - `packages/*` — Shared internal libraries, tooling, and configurations (`@repo/*` namespace):
   - `packages/typescript-config` — Shared TypeScript configurations (`@repo/typescript-config`).
   - `packages/eslint-config` — Shared ESLint configurations (`@repo/eslint-config`).
-  - `packages/playwright-config` — Shared Playwright configurations and web server presets (`@repo/playwright-config`).
-  - `packages/infra-schema` — Infrastructure manifest schema and validation tests (`@repo/infra-schema`).
 - `infra/*` — Terraform infrastructure declarations, environments (`dev`, `production`), and policies.
 - `.github/*` — CI/CD workflows, reusable deployment pipelines, and repository automation.
 
@@ -23,7 +20,7 @@ Monorepo managed with **pnpm** workspaces and **Turborepo**, hosting independent
   - Use `pnpm` exclusively. Never introduce `package-lock.json` or `yarn.lock`.
   - Always link workspace packages using `workspace:*` (for example, `"@repo/typescript-config": "workspace:*"`).
   - Keep `pnpm-lock.yaml` synchronized when modifying dependency manifests.
-- **Decoupled Infrastructure**: Routine application deployments (`.github/workflows/cd.yml` -> `_cd-app.yml`) handle container rollouts, smoke verification, and traffic promotion. Infrastructure and IAM changes are managed strictly via dedicated infrastructure pipelines (`.github/workflows/infra.yml`).
+- **Decoupled Infrastructure**: Routine application deployments (`.github/workflows/cd.yml`) handle container rollouts, smoke verification, and traffic promotion. Infrastructure and IAM changes are managed strictly via dedicated infrastructure pipelines (`.github/workflows/infra.yml`).
 
 ## Commands (Repo Root)
 
@@ -33,7 +30,6 @@ Monorepo managed with **pnpm** workspaces and **Turborepo**, hosting independent
 - **Testing**: `pnpm test` (unit/integration) / `pnpm test:e2e` (end-to-end)
 - **Quality & Linting**: `pnpm lint` / `pnpm typecheck` / `pnpm format:check` / `pnpm lint:workflows`
 - **Format**: `pnpm format`
-- **Adding Apps**: Follow the specification and boundary contracts in `.agents/skills/add-app/SKILL.md` to add new applications adhering to monorepo infra & CI/CD standards.
 - **Scoped Execution**:
   - Run task for a specific app or package:
     `pnpm turbo run <task> --filter=<target>` (e.g. `pnpm turbo run test --filter=helgefolelse`)

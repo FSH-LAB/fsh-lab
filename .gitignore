@@ -18,4 +18,3 @@ playwright-report/
 *.tfbackend
 infra/imports.tf
 infra/backend_override.tf
-coverage/

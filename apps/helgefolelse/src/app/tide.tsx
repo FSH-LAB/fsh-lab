@@ -34,6 +34,7 @@ export default function Tide({ initial }: { initial: Reading }) {
       over:  { label: "Over hodet", range: "80–100%", desc: "Helt oppslukt av helgefølelsen" }
     };
 
+    const WEEKDAY_NAMES_NO = ["", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søndag"];
     const WEEKDAY_SHORT_NO = ["", "Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"];
     const WEEKDAY_INDEX: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
 
@@ -104,7 +105,7 @@ export default function Tide({ initial }: { initial: Reading }) {
     function evaluateAtHours(hoursIntoWeek: number, customRiseEnd = RISE_END, boostPct = 0) {
       const h = ((hoursIntoWeek % WEEK) + WEEK) % WEEK;
       let value = 0;
-      let trend: "rising" | "holding" | "falling";
+      let trend = "rising";
 
       if (h < customRiseEnd) {
         value = 100 * ramp(h / customRiseEnd, RISE_SHAPE);
@@ -255,6 +256,8 @@ export default function Tide({ initial }: { initial: Reading }) {
     const root = containerRef.current;
 
     // DOM References
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const appEl = root.querySelector("#app");
     const svgEl = root.querySelector("#ocean-svg");
     const clipFrontEl = root.querySelector("#clip-path-front");
     const clipBackEl = root.querySelector("#clip-path-back");
@@ -301,26 +304,26 @@ export default function Tide({ initial }: { initial: Reading }) {
         const val = Math.min(100, Math.max(0, baseValue + d.offset));
         const isSelected = selectedDeptId === d.id;
         return `
-          <button type="button" data-dept-id="${d.id}" class="dept-row w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+          <div data-dept-id="${d.id}" class="dept-row p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
             isSelected ? "bg-teal-500/20 border-teal-300/60" : "bg-white/5 border-white/10 hover:bg-white/10"
           }">
-            <span class="flex items-center gap-2.5">
+            <div class="flex items-center gap-2.5">
               <span class="w-3 h-3 rounded-full shrink-0" style="background:${d.color}"></span>
-              <span>
-                <span class="text-xs font-semibold text-[var(--foam)] flex items-center gap-1.5">
+              <div>
+                <div class="text-xs font-semibold text-[var(--foam)] flex items-center gap-1.5">
                   <span>${d.name}</span>
                   <span class="text-[10px] font-mono-tabular text-[var(--foam)]/50">(${d.members})</span>
-                </span>
-                <span class="block text-[10px] text-[var(--foam)]/60">${d.status}</span>
-              </span>
-            </span>
-            <span class="text-right font-mono-tabular">
-              <span class="block text-xs font-bold text-[var(--foam)]">${val.toFixed(1)}%</span>
-              <span class="block text-[10px] ${d.offset >= 0 ? "text-emerald-300" : "text-amber-300"}">
+                </div>
+                <div class="text-[10px] text-[var(--foam)]/60">${d.status}</div>
+              </div>
+            </div>
+            <div class="text-right font-mono-tabular">
+              <div class="text-xs font-bold text-[var(--foam)]">${val.toFixed(1)}%</div>
+              <div class="text-[10px] ${d.offset >= 0 ? "text-emerald-300" : "text-amber-300"}">
                 ${d.offset >= 0 ? "+" : ""}${d.offset}% vs snitt
-              </span>
-            </span>
-          </button>
+              </div>
+            </div>
+          </div>
         `;
       }).join("");
 
@@ -403,14 +406,14 @@ export default function Tide({ initial }: { initial: Reading }) {
           const i = BAND_ORDER.length - 1 - revIdx;
           const pct = i * 20 + 10;
           return `
-            <button type="button" id="staff-label-${band}"
+            <div id="staff-label-${band}"
                  style="position: absolute; top: ${100 - pct}%; left: ${staff.major + 8}px; transform: translateY(-50%);"
                  class="staff-label flex items-center gap-2 pointer-events-auto cursor-pointer group"
                  data-target-band="${band}">
               <span class="text-[11px] sm:text-xs font-medium tracking-wide text-[var(--foam)]/40 group-hover:text-[var(--foam)] transition-colors whitespace-nowrap">
                 ${BANDS[band].label}
               </span>
-            </button>
+            </div>
           `;
         }).join("");
 
@@ -482,16 +485,13 @@ export default function Tide({ initial }: { initial: Reading }) {
     }
 
     function formatCountdown(hoursIntoWeek: number) {
-      const fridayHour = activeMode === "personal" ? personalFridayHour : 16;
-      const riseEnd = 4 * 24 + fridayHour;
-      const fridayTime = `${String(Math.floor(fridayHour)).padStart(2, "0")}:${String(Math.round((fridayHour % 1) * 60)).padStart(2, "0")}`;
-      if (hoursIntoWeek < riseEnd) {
-        const diff = riseEnd - hoursIntoWeek;
+      if (hoursIntoWeek < RISE_END) {
+        const diff = RISE_END - hoursIntoWeek;
         const d = Math.floor(diff / 24);
         const h = Math.floor(diff % 24);
         const m = Math.floor((diff * 60) % 60);
-        if (d > 0) return `${d}d ${h}t ${m}m til full helg (fre ${fridayTime})`;
-        return `${h}t ${m}m igjen til fredag kl. ${fridayTime}`;
+        if (d > 0) return `${d}d ${h}t ${m}m til full helg (fre 16:00)`;
+        return `${h}t ${m}m igjen til fredag kl. 16:00`;
       } else if (hoursIntoWeek < PLATEAU_END) {
         const diff = PLATEAU_END - hoursIntoWeek;
         const h = Math.floor(diff);
@@ -1116,7 +1116,7 @@ export default function Tide({ initial }: { initial: Reading }) {
             </div>
 
             {/* Center Concept Mode Switcher */}
-            <nav className="flex items-center gap-1 p-1 rounded-2xl glass-panel text-xs font-medium order-3 lg:order-2 w-full lg:w-auto justify-start overflow-x-auto" aria-label="Designkonsepter">
+            <nav className="flex items-center gap-1 p-1 rounded-2xl glass-panel text-xs font-medium order-3 lg:order-2 w-full lg:w-auto justify-center overflow-x-auto" aria-label="Designkonsepter">
               <button type="button" data-mode="classic" className="mode-tab active px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer text-[var(--foam)]/80 whitespace-nowrap">
                 <span>🌊</span>
                 <span>1. Felles Tidevann</span>
@@ -1180,7 +1180,7 @@ export default function Tide({ initial }: { initial: Reading }) {
                 {/* 1. When does your weekend start? */}
                 <div>
                   <div className="flex justify-between mb-1">
-                    <label htmlFor="input-fri-hour" className="text-[var(--foam)]/80">Når tar du helg på fredag?</label>
+                    <span className="text-[var(--foam)]/80">Når tar du helg på fredag?</span>
                     <span id="label-fri-hour" className="font-mono-tabular font-semibold text-amber-300">16:00</span>
                   </div>
                   <input id="input-fri-hour" type="range" min="11" max="20" step="0.5" defaultValue="16" className="calib-slider" />
@@ -1194,7 +1194,7 @@ export default function Tide({ initial }: { initial: Reading }) {
                 {/* 2. Energy / Workload modifier */}
                 <div>
                   <div className="flex justify-between mb-1">
-                    <label htmlFor="input-vibe-boost" className="text-[var(--foam)]/80">Mentalt batteri & arbeidsro</label>
+                    <span className="text-[var(--foam)]/80">Mentalt batteri & arbeidsro</span>
                     <span id="label-vibe-boost" className="font-mono-tabular font-semibold text-amber-300">Nøytral (0%)</span>
                   </div>
                   <input id="input-vibe-boost" type="range" min="-25" max="25" step="1" defaultValue="0" className="calib-slider" />
