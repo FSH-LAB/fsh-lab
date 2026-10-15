@@ -256,8 +256,6 @@ export default function Tide({ initial }: { initial: Reading }) {
     const root = containerRef.current;
 
     // DOM References
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const appEl = root.querySelector("#app");
     const svgEl = root.querySelector("#ocean-svg");
     const clipFrontEl = root.querySelector("#clip-path-front");
     const clipBackEl = root.querySelector("#clip-path-back");
