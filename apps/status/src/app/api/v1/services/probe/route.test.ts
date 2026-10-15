@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   getProbeSnapshot,
   getServiceTelemetry,
+  isAuthorizedToForce,
   resetProbeCacheForTesting,
 } from "@/lib/probe";
 import { registerService } from "@/lib/services";
@@ -96,13 +97,48 @@ describe("probe route and engine", () => {
     expect(results[TEST_SERVICE_ID]?.error).toBe("connect ECONNREFUSED");
   });
 
-  it("classifies timeout errors as degraded performance", async () => {
+  it("classifies timeout errors as major outage", async () => {
     resetProbeCacheForTesting();
     const mockFetch = async () => {
       const err = new Error("The operation timed out");
       err.name = "TimeoutError";
       throw err;
     };
+
+    const results = await getProbeSnapshot({
+      force: true,
+      targetId: TEST_SERVICE_ID,
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    expect(results[TEST_SERVICE_ID]?.status).toBe("major_outage");
+  });
+
+  it("classifies response with ready: false as major outage", async () => {
+    resetProbeCacheForTesting();
+    const mockFetch = async () =>
+      new Response(JSON.stringify({ status: "ok", ready: false }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+
+    const results = await getProbeSnapshot({
+      force: true,
+      targetId: TEST_SERVICE_ID,
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    expect(results[TEST_SERVICE_ID]?.status).toBe("major_outage");
+    expect(results[TEST_SERVICE_ID]?.error).toContain("ready=false");
+  });
+
+  it("classifies response with degraded status as degraded performance", async () => {
+    resetProbeCacheForTesting();
+    const mockFetch = async () =>
+      new Response(JSON.stringify({ status: "degraded", ready: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
 
     const results = await getProbeSnapshot({
       force: true,
@@ -152,5 +188,41 @@ describe("probe route and engine", () => {
 
     const headRes = await HEAD(request);
     expect(headRes.status).toBe(200);
+  });
+
+  it("restricts forced probe execution to authenticated callers", () => {
+    const unauthenticatedReq = new Request(
+      "http://localhost:3000/api/v1/services/probe?force=true",
+    );
+    expect(isAuthorizedToForce(unauthenticatedReq)).toBe(false);
+
+    process.env.INTERNAL_PROBE_SECRET = "secret-token-123";
+    try {
+      const authHeaderReq = new Request(
+        "http://localhost:3000/api/v1/services/probe?force=true",
+        {
+          headers: { Authorization: "Bearer secret-token-123" },
+        },
+      );
+      expect(isAuthorizedToForce(authHeaderReq)).toBe(true);
+
+      const tokenHeaderReq = new Request(
+        "http://localhost:3000/api/v1/services/probe?force=true",
+        {
+          headers: { "x-probe-token": "secret-token-123" },
+        },
+      );
+      expect(isAuthorizedToForce(tokenHeaderReq)).toBe(true);
+
+      const invalidReq = new Request(
+        "http://localhost:3000/api/v1/services/probe?force=true",
+        {
+          headers: { "x-probe-token": "wrong" },
+        },
+      );
+      expect(isAuthorizedToForce(invalidReq)).toBe(false);
+    } finally {
+      delete process.env.INTERNAL_PROBE_SECRET;
+    }
   });
 });

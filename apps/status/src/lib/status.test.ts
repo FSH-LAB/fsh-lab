@@ -192,6 +192,13 @@ describe("status logic", () => {
     expect(metrics.points).toHaveLength(4);
   });
 
+  it("returns zero metrics and empty points when no telemetry exists", () => {
+    const metrics = generate24hMetrics(20);
+    expect(metrics.avgLatencyMs).toBe(0);
+    expect(metrics.p95LatencyMs).toBe(0);
+    expect(metrics.points).toHaveLength(0);
+  });
+
   it("returns appropriate badge metadata for all status types", () => {
     expect(getStatusBadgeInfo("operational").label).toBe("Up");
     expect(getStatusBadgeInfo("degraded_performance").label).toBe("Degraded");

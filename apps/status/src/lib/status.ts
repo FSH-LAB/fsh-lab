@@ -84,19 +84,16 @@ export function generate24hMetrics(
   p95LatencyMs: number;
   points: ServiceMetricPoint[];
 } {
+  void baseLatencyMs;
   void varianceMs;
   void now;
   const points: ServiceMetricPoint[] =
-    providedPoints && providedPoints.length > 0
-      ? providedPoints
-      : baseLatencyMs > 0
-        ? [{ timestamp: "Live", latencyMs: baseLatencyMs }]
-        : [];
+    providedPoints && providedPoints.length > 0 ? providedPoints : [];
 
   if (points.length === 0) {
     return {
-      avgLatencyMs: baseLatencyMs,
-      p95LatencyMs: baseLatencyMs,
+      avgLatencyMs: 0,
+      p95LatencyMs: 0,
       points: [],
     };
   }

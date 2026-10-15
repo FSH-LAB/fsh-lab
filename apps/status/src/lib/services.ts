@@ -155,7 +155,7 @@ export function buildMonitoredService(
   );
 
   // Retrieve real observed telemetry points
-  const realTelemetry = getServiceTelemetry(config.id, currentLatency);
+  const realTelemetry = getServiceTelemetry(config.id);
 
   // Compute 90d uptime
   const uptimeSum = days.reduce((sum, d) => sum + d.uptimePercentage, 0);

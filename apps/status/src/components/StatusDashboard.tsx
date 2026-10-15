@@ -86,9 +86,10 @@ export function StatusDashboard({
     }
   }, [activeIncidents, scheduledMaintenances]);
 
-  // Auto-refresh interval (every 30 seconds)
+  // Initial live probe on mount and periodic auto-refresh (every 30 seconds)
   useEffect(() => {
     if (!autoRefresh) return;
+    runLiveProbe();
     const interval = setInterval(() => {
       runLiveProbe();
     }, 30000);

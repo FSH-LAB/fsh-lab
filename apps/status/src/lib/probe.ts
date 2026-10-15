@@ -29,26 +29,32 @@ export function resetProbeCacheForTesting(): void {
 }
 
 /**
+ * Checks whether an incoming HTTP request has internal authorization to force an un-coalesced probe.
+ */
+export function isAuthorizedToForce(request: Request): boolean {
+  const secret = process.env.INTERNAL_PROBE_SECRET || process.env.CRON_SECRET;
+  if (!secret) return false;
+  const tokenHeader = request.headers.get("x-probe-token");
+  if (tokenHeader === secret) return true;
+  const authHeader = request.headers.get("authorization");
+  if (authHeader === `Bearer ${secret}`) return true;
+  return false;
+}
+
+/**
  * Retrieves real rolling telemetry points and calculated latency for a service.
  */
-export function getServiceTelemetry(
-  serviceId: string,
-  fallbackLatency = 0,
-): {
+export function getServiceTelemetry(serviceId: string): {
   avgLatencyMs: number;
   p95LatencyMs: number;
   points: Array<{ timestamp: string; latencyMs: number }>;
 } {
   const points = probeTelemetryStore[serviceId] ?? [];
   if (points.length === 0) {
-    const singlePoint =
-      fallbackLatency > 0
-        ? [{ timestamp: "Live", latencyMs: fallbackLatency }]
-        : [];
     return {
-      avgLatencyMs: fallbackLatency,
-      p95LatencyMs: fallbackLatency,
-      points: singlePoint,
+      avgLatencyMs: 0,
+      p95LatencyMs: 0,
+      points: [],
     };
   }
 
@@ -80,18 +86,23 @@ export async function getProbeSnapshot(options?: {
   const customFetch = options?.fetchFn ?? fetch;
   const now = Date.now();
 
-  // If we have a fresh cache and not forcing, return cached results
+  // 1. Fresh cache check: return cached data if fresh and not forcing
   if (
     !options?.force &&
-    !options?.targetId &&
     probeCache &&
     now - probeCache.timestamp < CACHE_TTL_MS
   ) {
-    return probeCache.data;
+    if (options?.targetId) {
+      if (probeCache.data[options.targetId]) {
+        return probeCache.data;
+      }
+    } else {
+      return probeCache.data;
+    }
   }
 
-  // If a full probe is already in flight and not targeted/forced, reuse its promise
-  if (activeProbePromise && !options?.force && !options?.targetId) {
+  // 2. Coalescing check: if an active probe is in flight and not forcing, reuse it
+  if (activeProbePromise && !options?.force) {
     return activeProbePromise;
   }
 
@@ -136,17 +147,73 @@ export async function getProbeSnapshot(options?: {
           const latencyMs = Math.round(performance.now() - start);
 
           if (response.ok) {
+            let isServiceReady = true;
+            let reportedStatus: ServiceStatus | null = null;
+            let errorDetail: string | undefined;
+
+            // Validate documented health contract fields: { status: "ok", ready: true, ... }
+            const contentType = response.headers.get("content-type") || "";
+            if (contentType.includes("application/json")) {
+              try {
+                const body = (await response.json()) as Record<string, unknown>;
+                if (body && typeof body === "object") {
+                  if (typeof body.ready === "boolean" && !body.ready) {
+                    isServiceReady = false;
+                    errorDetail =
+                      "Service readiness probe indicated ready=false";
+                  }
+                  if (typeof body.status === "string") {
+                    const normalized = body.status.toLowerCase();
+                    if (
+                      normalized === "ok" ||
+                      normalized === "healthy" ||
+                      normalized === "up"
+                    ) {
+                      // Healthy
+                    } else if (normalized === "degraded") {
+                      reportedStatus = "degraded_performance";
+                    } else if (normalized === "maintenance") {
+                      reportedStatus = "maintenance";
+                    } else {
+                      isServiceReady = false;
+                      errorDetail = `Service reported unhealthy status: ${body.status}`;
+                    }
+                  }
+                }
+              } catch {
+                // If body isn't valid JSON, fallback to HTTP 200 ok
+              }
+            }
+
+            if (!isServiceReady) {
+              results[service.id] = {
+                id: service.id,
+                name: service.name,
+                status: "major_outage",
+                latencyMs,
+                probeType: service.probeType ?? "http_probe",
+                statusCode: response.status,
+                error: errorDetail,
+                timestamp: timestampIso,
+              };
+              return;
+            }
+
+            const finalStatus: ServiceStatus =
+              reportedStatus ??
+              (latencyMs > 800 ? "degraded_performance" : "operational");
+
             results[service.id] = {
               id: service.id,
               name: service.name,
-              status: latencyMs > 800 ? "degraded_performance" : "operational",
+              status: finalStatus,
               latencyMs,
               probeType: service.probeType ?? "http_probe",
               statusCode: response.status,
               timestamp: timestampIso,
             };
 
-            // Store real telemetry point
+            // Store real telemetry point only for active responses
             if (!probeTelemetryStore[service.id]) {
               probeTelemetryStore[service.id] = [];
             }
@@ -178,15 +245,12 @@ export async function getProbeSnapshot(options?: {
           // Network failure, DNS error, connection refusal, or timeout.
           const errorMsg =
             err instanceof Error ? err.message : "Connection failed";
-          const isTimeout =
-            err instanceof Error &&
-            (err.name === "TimeoutError" ||
-              err.message.toLowerCase().includes("timeout"));
 
+          // Unresponsive endpoints (timeouts, connection refusals) are classified as major_outage
           results[service.id] = {
             id: service.id,
             name: service.name,
-            status: isTimeout ? "degraded_performance" : "major_outage",
+            status: "major_outage",
             latencyMs: 0,
             probeType: service.probeType ?? "http_probe",
             error: errorMsg,
@@ -196,12 +260,14 @@ export async function getProbeSnapshot(options?: {
       }),
     );
 
-    // Only cache if full scan was performed
+    // Update probe cache
     if (!options?.targetId) {
       probeCache = {
         timestamp: Date.now(),
         data: results,
       };
+    } else if (probeCache) {
+      Object.assign(probeCache.data, results);
     }
 
     return results;

@@ -1,4 +1,4 @@
-import { getProbeSnapshot } from "@/lib/probe";
+import { getProbeSnapshot, isAuthorizedToForce } from "@/lib/probe";
 import { optionsResponse, problemResponse, restJsonResponse } from "@/lib/rest";
 import { MONITORED_SERVICES_CONFIG } from "@/lib/services";
 
@@ -19,10 +19,11 @@ export async function GET(
   }
 
   const url = new URL(request.url);
-  const force = url.searchParams.get("force") === "true";
+  const force =
+    url.searchParams.get("force") === "true" && isAuthorizedToForce(request);
 
-  const results = await getProbeSnapshot({ targetId: id, force });
-  const probe = results[id];
+  const snapshot = await getProbeSnapshot({ force });
+  const probe = snapshot[id];
 
   return restJsonResponse(
     {
