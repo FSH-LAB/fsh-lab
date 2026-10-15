@@ -1,6 +1,5 @@
 mock_provider "google" {
   mock_resource "google_iam_workload_identity_pool" {
-    override_during = plan
     defaults = {
       name = "projects/123456789/locations/global/workloadIdentityPools/github-actions"
     }
@@ -149,7 +148,7 @@ run "infra_identity_is_strictly_scoped" {
   command = plan
 
   assert {
-    condition     = google_service_account_iam_member.github_infra_applier.member == "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.job_workflow_ref/FSH-LAB/fsh-lab/.github/workflows/infra.yml@refs/heads/main"
+    condition     = local.infra_applier_principal_attribute == "attribute.job_workflow_ref/FSH-LAB/fsh-lab/.github/workflows/infra.yml@refs/heads/main"
     error_message = "Infra identity trust must be restricted to verified infra.yml workflow claims."
   }
 

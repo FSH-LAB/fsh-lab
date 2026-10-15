@@ -51,6 +51,9 @@ locals {
     for file in local.app_files :
     dirname(file) => jsondecode(file("${path.module}/../apps/${file}"))
   }
+
+  # Only the infra.yml workflow on main may impersonate the infra applier.
+  infra_applier_principal_attribute = "attribute.job_workflow_ref/${var.github_repository}/.github/workflows/infra.yml@refs/heads/main"
 }
 
 # ---------------------------------------------------------------------------
@@ -228,7 +231,7 @@ resource "google_service_account_iam_member" "github_deployer" {
 resource "google_service_account_iam_member" "github_infra_applier" {
   service_account_id = google_service_account.infra_applier.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.job_workflow_ref/${var.github_repository}/.github/workflows/infra.yml@refs/heads/main"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/${local.infra_applier_principal_attribute}"
 }
 
 # ---------------------------------------------------------------------------
