@@ -274,19 +274,18 @@ export default function Tide({ initial }: { initial: Reading }) {
     ) {
       const h = ((hoursIntoWeek % WEEK) + WEEK) % WEEK;
       let value = 0;
-      let trend = "rising";
 
       if (h < customRiseEnd) {
         value = 100 * ramp(h / customRiseEnd, RISE_SHAPE);
-        trend = "rising";
       } else if (h < PLATEAU_END) {
         value = 100;
-        trend = "holding";
       } else {
         const p = (h - PLATEAU_END) / (WEEK - PLATEAU_END);
         value = 100 * (1 - ramp(p, FALL_SHAPE));
-        trend = "falling";
       }
+
+      const trend =
+        h < customRiseEnd ? "rising" : h < PLATEAU_END ? "holding" : "falling";
 
       value = Math.min(100, Math.max(0, value + boostPct));
 
