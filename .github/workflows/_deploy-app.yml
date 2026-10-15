@@ -1,8 +1,7 @@
-name: Release app
+name: Deploy app
 
-# Reusable pipeline for one app: build, scan and attest an image, deploy it
-# through dev and production, then tag the release. Each app gets a small
-# trigger workflow (for example helgefolelse.yml) that calls this one.
+# Reusable pipeline for one app: verify, build, scan and attest an image, deploy it
+# through dev and production, then tag the release. Called dynamically by deploy.yml.
 #
 # Conventions (enforced by infra/modules/cloud-run-app):
 #   apps/<app>/Dockerfile          image build
@@ -36,19 +35,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository]
         with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - name: Cache Turborepo
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
-        with:
-          path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
-      - run: pnpm install --frozen-lockfile
+          install: "true"
       - name: Verify app and dependencies
         env:
           APP: ${{ inputs.app }}
@@ -127,32 +116,60 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
 
   deploy-dev:
+    name: Deploy dev
     needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       attestations: read # Verify image provenance.
       contents: read # Check out smoke tests.
       packages: write # Pull the image and update its environment tag.
       id-token: write # Authenticate to GCP using Workload Identity Federation.
-    uses: ./.github/workflows/cd.yml # zizmor: ignore[self-repository] -- actionlint 1.7.12 does not support $/ workflow calls.
-    with:
-      environment: dev
-      app: ${{ inputs.app }}
-      release: ${{ github.sha }}
-      digest: ${{ needs.publish.outputs.digest }}
+    environment:
+      name: dev
+      url: ${{ steps.rollout.outputs.url }}
+    concurrency:
+      group: deploy-${{ inputs.app }}-dev
+      cancel-in-progress: false
+    steps:
+      - uses: ./.github/actions/cloud-run-rollout # zizmor: ignore[self-repository]
+        id: rollout
+        with:
+          app: ${{ inputs.app }}
+          environment: dev
+          release: ${{ github.sha }}
+          digest: ${{ needs.publish.outputs.digest }}
+          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+          gcp_wif_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          gcp_deploy_service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
   deploy-production:
+    name: Deploy production
     needs: [publish, deploy-dev]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       attestations: read # Verify image provenance.
       contents: read # Check out smoke tests.
       packages: write # Pull the image and update its environment tag.
       id-token: write # Authenticate to GCP using Workload Identity Federation.
-    uses: ./.github/workflows/cd.yml # zizmor: ignore[self-repository] -- actionlint 1.7.12 does not support $/ workflow calls.
-    with:
-      environment: production
-      app: ${{ inputs.app }}
-      release: ${{ github.sha }}
-      digest: ${{ needs.publish.outputs.digest }}
+    environment:
+      name: production
+      url: ${{ steps.rollout.outputs.url }}
+    concurrency:
+      group: deploy-${{ inputs.app }}-production
+      cancel-in-progress: false
+    steps:
+      - uses: ./.github/actions/cloud-run-rollout # zizmor: ignore[self-repository]
+        id: rollout
+        with:
+          app: ${{ inputs.app }}
+          environment: production
+          release: ${{ github.sha }}
+          digest: ${{ needs.publish.outputs.digest }}
+          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+          gcp_wif_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          gcp_deploy_service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
   release:
     name: Create release

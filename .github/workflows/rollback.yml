@@ -1,0 +1,51 @@
+name: Rollback
+
+# Manually deploys or rolls back an already-published and attested app release to dev or production.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy to
+        required: true
+        type: choice
+        options: [dev, production]
+      app:
+        description: Application to deploy
+        required: true
+        type: string
+      release:
+        description: Commit SHA or release tag (for example helgefolelse@v2026.10.3) to deploy or roll back to
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.app }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Rollback ${{ inputs.app }} to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      attestations: read # Verify image provenance.
+      contents: read # Check out smoke tests.
+      packages: write # Pull the image and update its environment tag.
+      id-token: write # Authenticate to GCP using Workload Identity Federation.
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.rollout.outputs.url }}
+    steps:
+      - uses: ./.github/actions/cloud-run-rollout # zizmor: ignore[self-repository]
+        id: rollout
+        with:
+          app: ${{ inputs.app }}
+          environment: ${{ inputs.environment }}
+          release: ${{ inputs.release }}
+          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+          gcp_wif_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          gcp_deploy_service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
