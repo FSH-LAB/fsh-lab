@@ -30,7 +30,7 @@ Monorepo managed with **pnpm** workspaces and **Turborepo**, hosting independent
 - **Testing**: `pnpm test` (unit/integration) / `pnpm test:e2e` (end-to-end)
 - **Quality & Linting**: `pnpm lint` / `pnpm typecheck` / `pnpm format:check` / `pnpm lint:workflows`
 - **Format**: `pnpm format`
-- **Scaffold App**: `pnpm scaffold:app <name> "[Display Name]"` (scaffolds a new app adhering to monorepo infra & CI/CD standards using `.agents/skills/add-app`)
+- **Adding Apps**: Follow the specification and boundary contracts in `.agents/skills/add-app/SKILL.md` to add new applications adhering to monorepo infra & CI/CD standards.
 - **Scoped Execution**:
   - Run task for a specific app or package:
     `pnpm turbo run <task> --filter=<target>` (e.g. `pnpm turbo run test --filter=helgefolelse`)

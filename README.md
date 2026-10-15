@@ -59,15 +59,10 @@ SMOKE_URL=http://localhost:8080 SHA="$(git rev-parse HEAD)" pnpm --filter helgef
 
 ## Adding a New Application
 
-Adding a new application is a single-command operation powered by zero-touch GitOps discovery:
+Adding a new application is powered by zero-touch GitOps discovery:
 
-1. **Scaffold the App**:
-
-   ```sh
-   pnpm scaffold:app <name> "[Display Name]"
-   ```
-
-   This creates `apps/<name>` containing `infra.json`, pinned workspace catalog dependencies in `package.json`, TypeScript, Vitest, Playwright, and operational health smoke tests.
+1. **Create the Application Directory**:
+   Create `apps/<name>` containing `infra.json`, `package.json`, `/api/health`, and `tests/smoke.mjs` (see [`.agents/skills/add-app/SKILL.md`](.agents/skills/add-app/SKILL.md) for the universal boundary contracts and runbook).
 
 2. **Open a Pull Request**:
    - `ci.yml` lints, typechecks, tests, and builds changed packages via Turborepo.

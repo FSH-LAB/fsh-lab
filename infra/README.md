@@ -22,13 +22,7 @@ Applications in the monorepo are dynamically discovered from their local manifes
 - Deploys the Cloud Run service (`<app>-web`) with deletion protection, configured resource limits (CPU/Memory/Scaling), and candidate traffic tagging
 - Grants the deployer service account permission to act as the app runtime identity
 
-To add a new application to the environment, run:
-
-```sh
-pnpm scaffold:app <name> "[Display Name]"
-```
-
-This creates `apps/<name>/infra.json`. No changes to `.tf` files are required.
+To add a new application to the environment, create `apps/<name>/infra.json` specifying the application metadata (see `.agents/skills/add-app/SKILL.md`). No changes to `.tf` files are required.
 
 To roll out this permission boundary, pause deployments and apply the GCP root with operator credentials in each environment. The plan must add the conditional bucket grant. It removes the deployer's project-wide `roles/storage.admin` grant only if that grant was already tracked in this state; additive IAM resources do not remove unmanaged grants. CI cannot apply this IAM change itself.
 

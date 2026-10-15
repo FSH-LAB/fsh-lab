@@ -3,7 +3,7 @@ name: add-app
 description: >-
   Use this skill when adding a new application to the FSH-LAB monorepo across any
   language, framework, or use case (Web UI, API service, background worker, or static site).
-  Guides or automates workspace setup, multi-stage containerization, operational health contracts,
+  Guides workspace setup, containerization, operational health contracts,
   candidate smoke testing, Terraform infrastructure, Turborepo bridging, and CI/CD pipelines.
 ---
 
@@ -14,8 +14,6 @@ This skill guides you through adding a new standalone application under `apps/<a
 > [!NOTE]
 > Applications in this monorepo can be written in **any programming language or runtime** (Go, Python, Rust, Node.js, Next.js, static site generators, etc.).
 > This standard defines the **universal boundary contracts**—infrastructure, containerization, operational health, candidate smoke testing, task orchestration, and CI/CD pipelines—while keeping application domain logic strictly isolated.
-
-For the in-depth architectural specification, consult [references/app-specification.md](./references/app-specification.md).
 
 ---
 
@@ -65,30 +63,170 @@ Every application added to `apps/<app>` must adhere to these contracts:
 
 ---
 
-## 3. Quick Start (Automated Scaffolding)
+## 3. Required File Layout & Specifications
 
-Use the built-in scaffolding CLI:
+When adding a new application `apps/<app>`, create the following directory structure:
 
-```bash
-# Default Next.js full-stack app
-pnpm scaffold:app <app-name> "[Display Name]"
-
-# Or generic/polyglot starter (runnable zero-dependency baseline)
-pnpm scaffold:app <app-name> "[Display Name]" --template minimal
+```
+apps/<app>/
+├── infra.json               # Required: Infrastructure metadata for Terraform discovery
+├── package.json             # Required: Monorepo workspace package & Turborepo task hooks
+├── tests/
+│   └── smoke.mjs            # Required: Candidate revision smoke test for CD pipeline
+├── src/                     # Application source files
+│   └── app/api/health/      # Health check endpoint (for Next.js apps)
+└── Dockerfile               # Required ONLY for custom/polyglot runtimes (Next.js uses root Dockerfile)
 ```
 
-Or invoke the script directly:
+### 3.1 `infra.json`
 
-```bash
-node .agents/skills/add-app/scripts/scaffold-app.mjs <app-name> "[Display Name]" [--template <nextjs|minimal>]
+Every app requires an `apps/<app>/infra.json` file. It is discovered automatically by Terraform in `infra/main.tf`:
+
+```json
+{
+  "displayName": "My Application",
+  "public": true,
+  "cpu": "1",
+  "memory": "512Mi",
+  "minInstances": 0,
+  "maxInstances": 2
+}
 ```
 
-Supported flags:
+Field reference:
 
-- `--template <nextjs|minimal>`: Choose boilerplate style (default: `nextjs`). `minimal` generates a runnable, zero-dependency baseline that satisfies all 7 contracts out of the box.
-- `--port <port>`: Explicitly specify local dev port (auto-detects next available integer `3000+` by default).
-- `--dry-run`: Preview changes without modifying files.
-- `--force`: Overwrite files if directory already exists.
+- `displayName` (string, required): Human-readable service name.
+- `public` (boolean, optional, default: `true`): Whether the Cloud Run service is publicly accessible without authentication.
+- `cpu` (string, optional, default: `"1"`): Cloud Run CPU allocation.
+- `memory` (string, optional, default: `"512Mi"`): Cloud Run memory limit.
+- `minInstances` (number, optional, default: `0`): Minimum warm instances.
+- `maxInstances` (number, optional, default: `2`): Maximum instance scaling cap.
+
+### 3.2 `package.json`
+
+Every app must be a valid pnpm workspace package. Reference shared dependencies using pnpm catalogs (`"catalog:"`):
+
+```json
+{
+  "name": "<app>",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3002",
+    "build": "next build",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:smoke": "node --test tests/smoke.mjs"
+  },
+  "dependencies": {
+    "next": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
+```
+
+_For non-Node / polyglot runtimes_, `package.json` acts as the Turborepo task bridge:
+
+```json
+{
+  "name": "<app>",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "./scripts/dev.sh",
+    "build": "./scripts/build.sh",
+    "lint": "./scripts/lint.sh",
+    "typecheck": "node -e 'process.exit(0)'",
+    "test": "./scripts/test.sh",
+    "test:smoke": "node --test tests/smoke.mjs"
+  }
+}
+```
+
+### 3.3 Operational Health Check (`/api/health`)
+
+The health endpoint must return HTTP 200 with JSON matching this structure:
+
+```ts
+export function GET() {
+  return Response.json({
+    status: "ok",
+    ready: true,
+    commit: process.env.GIT_SHA ?? null,
+    uptime: Math.floor(process.uptime()),
+  });
+}
+```
+
+### 3.4 Candidate Smoke Test (`tests/smoke.mjs`)
+
+The CD pipeline runs this script against candidate revisions before switching traffic. It receives `SMOKE_URL` and `SHA`:
+
+```js
+import assert from "node:assert/strict";
+import test from "node:test";
+
+const smokeUrl = process.env.SMOKE_URL;
+const expectedSha = process.env.SHA;
+
+if (!smokeUrl) {
+  console.error("SMOKE_URL environment variable is required");
+  process.exit(1);
+}
+
+const base = smokeUrl.replace(/\/$/, "");
+
+test("candidate revision smoke verification", async () => {
+  // 1. Poll /api/health with backoff (up to 60s)
+  const healthUrl = `${base}/api/health`;
+  const deadline = Date.now() + 60_000;
+  let healthy = false;
+  let lastError;
+
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(healthUrl, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const body = await res.json();
+        if (body.status === "ok" && body.ready === true) {
+          if (!expectedSha || body.commit === expectedSha) {
+            healthy = true;
+            break;
+          }
+        }
+      }
+    } catch (err) {
+      lastError = err;
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  assert.ok(
+    healthy,
+    `Service failed health check within 60s. Last error: ${lastError}`,
+  );
+
+  // 2. Verify root entrypoint
+  const entryRes = await fetch(`${base}/`, {
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.ok(entryRes.ok, `Entrypoint returned HTTP ${entryRes.status}`);
+});
+```
 
 ---
 
@@ -97,52 +235,33 @@ Supported flags:
 ### Phase 1: Classification & Naming Assessment
 
 - Identify the app's archetype (Web UI, API service, background worker, or static site).
-- Validate name against `^[a-z][a-z0-9-]{1,20}[a-z0-9]$` (&le; 22 chars for GCP SA limits).
+- Choose an app name conforming to `^[a-z][a-z0-9-]{1,20}[a-z0-9]$` (&le; 22 chars for GCP SA limits).
 
-### Phase 2: Automated Scaffolding
+### Phase 2: Workspace Setup
 
-- Run `pnpm scaffold:app <app-name> "[Display Name]" --template <nextjs|minimal>` to generate the app files, `infra.json`, and catalog dependencies.
-- Run `pnpm install` to link the workspace package and update `pnpm-lock.yaml`.
+1. Create directory `apps/<app>`.
+2. Create `apps/<app>/infra.json` with desired Cloud Run resource limits.
+3. Create `apps/<app>/package.json` linking workspace configs (`@repo/*`) and catalog dependencies.
+4. Run `pnpm install` from the repo root to link the workspace package and update `pnpm-lock.yaml`.
 
 ### Phase 3: Runtime Implementation & Port Contract
 
-- Implement your application logic using your language/framework of choice.
-- Implement `GET /api/health` returning JSON: `{ status: "ok", ready: true, commit, uptime }`. Read `GIT_SHA` from environment variables.
-- Containerization:
-  - Next.js applications automatically use the centralized root `Dockerfile` using Google Distroless (`gcr.io/distroless/nodejs24-debian12:nonroot`).
-  - Polyglot or custom runtimes provide `apps/<app>/Dockerfile` exposing port 8080 and switching to a non-root user.
+1. Implement application code under `apps/<app>/src`.
+2. Implement `GET /api/health` returning JSON `{ status: "ok", ready: true, commit, uptime }`.
+3. Containerization:
+   - Next.js applications automatically build with the root `Dockerfile` using Google Distroless (`gcr.io/distroless/nodejs24-debian12:nonroot`).
+   - Polyglot or custom runtimes provide `apps/<app>/Dockerfile` exposing port `8080` and executing as an unprivileged non-root user.
 
-### Phase 4: Turborepo Task Bridging
+### Phase 4: Candidate Smoke Test
 
-Ensure `apps/<app>/package.json` maps standard tasks to your toolchain:
+Create `apps/<app>/tests/smoke.mjs` verifying:
 
-- `dev`: Start local server using assigned port (`--port <port>`).
-- `build`: Compile binaries or bundle assets (or `node -e 'process.exit(0)'` if interpreted).
-- `lint`: Static analysis or format verification.
-- `typecheck`: Type validation (or `node -e 'process.exit(0)'` if statically compiled).
-- `test`: Unit and integration test runner.
-- `test:smoke`: Invokes `node --test tests/smoke.mjs`.
+- `/api/health` reports `{ status: "ok", ready: true }` and matches `expectedSha`.
+- Root endpoint (`/`) responds with HTTP 200.
 
-### Phase 5: Candidate Smoke Test Customization
+### Phase 5: Verification Checklist
 
-Inspect `apps/<app>/tests/smoke.mjs`:
-
-- For Web UIs: Ensure root `/` test verifies expected HTML rendering.
-- For APIs/Workers: Adjust root `/` test to verify JSON status or API descriptor.
-
-### Phase 6: Verification Gating
-
-Execute the complete verification checklist before committing (see below).
-
-### Phase 7: (Optional) Register in Status Dashboard
-
-Add an entry to `MONITORED_SERVICES_CONFIG` in `apps/status/src/lib/services.ts`.
-
----
-
-## 5. Verification Checklist
-
-Run these commands in order before committing any new application:
+Execute the complete verification checklist before committing:
 
 ```bash
 # 1. Link workspace and update lockfile
@@ -151,7 +270,7 @@ pnpm install
 # 2. Lint workflow definitions
 pnpm lint:workflows
 
-# 3. Validate Terraform infrastructure
+# 3. Validate Terraform infrastructure discovery
 terraform -chdir=infra init -backend=false
 terraform -chdir=infra validate
 terraform -chdir=infra test
@@ -159,12 +278,10 @@ terraform -chdir=infra test
 # 4. Verify app lifecycle tasks via Turborepo
 pnpm turbo run lint typecheck test build --filter=<app>...
 
-# 5. Verify local Docker build and candidate smoke test
-docker build -t <app>:verify -f apps/<app>/Dockerfile .
-docker run -d --name <app>-verify -p 8080:8080 -e GIT_SHA=0000000000000000000000000000000000000000 <app>:verify
-SMOKE_URL=http://localhost:8080 SHA=0000000000000000000000000000000000000000 node --test apps/<app>/tests/smoke.mjs
-docker rm -f <app>-verify
-
-# 6. Format check
+# 5. Format check
 pnpm format:check
 ```
+
+### Phase 6: (Optional) Register in Status Dashboard
+
+Add an entry to `MONITORED_SERVICES_CONFIG` in `apps/status/src/lib/services.ts` to include the new application in live uptime monitoring.

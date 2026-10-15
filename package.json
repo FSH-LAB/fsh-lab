@@ -14,8 +14,7 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "scaffold:app": "node .agents/skills/add-app/scripts/scaffold-app.mjs"
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@playwright/test": "catalog:",
