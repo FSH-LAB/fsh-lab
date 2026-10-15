@@ -12,16 +12,13 @@
     "lint:workflows": "actionlint .github/workflows/*.yml",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "test:coverage": "vitest run --coverage",
     "test:e2e": "turbo run test:e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "@playwright/test": "catalog:",
-    "@vitest/coverage-v8": "catalog:",
+    "@playwright/test": "^1.64.0",
     "prettier": "^3.9.9",
-    "turbo": "^2.11.7",
-    "vitest": "catalog:"
+    "turbo": "^2.11.7"
   }
 }

@@ -15,13 +15,15 @@ test.describe("Home page", () => {
     await expect(page).toHaveTitle(/helgefølelse/);
 
     // Header wordmark
-    await expect(page.locator(".wordmark")).toHaveText("helgefølelse");
+    await expect(
+      page.getByRole("heading", { name: "helgefølelse" }),
+    ).toBeVisible();
 
     // The tide visualization scene & SVG
-    const scene = page.locator(".scene");
+    const scene = page.locator("#app");
     await expect(scene).toBeVisible();
 
-    const sea = page.locator("svg.sea");
+    const sea = page.locator("#ocean-svg");
     await expect(sea).toBeVisible();
 
     // Readout percentage displays
