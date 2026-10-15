@@ -482,13 +482,16 @@ export default function Tide({ initial }: { initial: Reading }) {
     }
 
     function formatCountdown(hoursIntoWeek: number) {
-      if (hoursIntoWeek < RISE_END) {
-        const diff = RISE_END - hoursIntoWeek;
+      const fridayHour = activeMode === "personal" ? personalFridayHour : 16;
+      const riseEnd = 4 * 24 + fridayHour;
+      const fridayTime = `${String(Math.floor(fridayHour)).padStart(2, "0")}:${String(Math.round((fridayHour % 1) * 60)).padStart(2, "0")}`;
+      if (hoursIntoWeek < riseEnd) {
+        const diff = riseEnd - hoursIntoWeek;
         const d = Math.floor(diff / 24);
         const h = Math.floor(diff % 24);
         const m = Math.floor((diff * 60) % 60);
-        if (d > 0) return `${d}d ${h}t ${m}m til full helg (fre 16:00)`;
-        return `${h}t ${m}m igjen til fredag kl. 16:00`;
+        if (d > 0) return `${d}d ${h}t ${m}m til full helg (fre ${fridayTime})`;
+        return `${h}t ${m}m igjen til fredag kl. ${fridayTime}`;
       } else if (hoursIntoWeek < PLATEAU_END) {
         const diff = PLATEAU_END - hoursIntoWeek;
         const h = Math.floor(diff);
