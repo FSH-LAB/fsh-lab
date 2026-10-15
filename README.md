@@ -66,8 +66,7 @@ Adding a new application is powered by zero-touch GitOps discovery:
    Create `apps/<name>` containing `infra.json`, `package.json`, `/api/health`, and `tests/smoke.mjs` (see [`.agents/skills/add-app/SKILL.md`](.agents/skills/add-app/SKILL.md) for the universal boundary contracts and runbook).
 
 2. **Open a Pull Request**:
-   - `ci.yml` lints, typechecks, tests, and builds changed packages via Turborepo.
-   - `infra.yml` validates Terraform configurations and tests infrastructure assertions.
+   - `ci.yml` lints, typechecks, tests, and builds changed packages via Turborepo, and validates Terraform configurations and infrastructure assertions.
 
 3. **Merge to `main`**:
    - `infra.yml` provisions the Cloud Run service shell with the initial placeholder image via scoped infrastructure automation.

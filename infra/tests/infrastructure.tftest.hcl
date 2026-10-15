@@ -1,8 +1,9 @@
-override_resource {
-  target          = google_iam_workload_identity_pool.github
-  override_during = plan
-  values = {
-    name = "projects/123456789/locations/global/workloadIdentityPools/github-actions"
+mock_provider "google" {
+  mock_resource "google_iam_workload_identity_pool" {
+    override_during = plan
+    defaults = {
+      name = "projects/123456789/locations/global/workloadIdentityPools/github-actions"
+    }
   }
 }
 

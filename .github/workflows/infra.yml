@@ -7,12 +7,6 @@ on:
       - "infra/**"
       - "apps/**/infra.json"
       - ".github/workflows/infra.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "infra/**"
-      - "apps/**/infra.json"
-      - ".github/workflows/infra.yml"
   workflow_dispatch:
     inputs:
       environment:
