@@ -104,7 +104,7 @@ export default function Tide({ initial }: { initial: Reading }) {
     function evaluateAtHours(hoursIntoWeek: number, customRiseEnd = RISE_END, boostPct = 0) {
       const h = ((hoursIntoWeek % WEEK) + WEEK) % WEEK;
       let value = 0;
-      let trend = "rising";
+      let trend: "rising" | "holding" | "falling";
 
       if (h < customRiseEnd) {
         value = 100 * ramp(h / customRiseEnd, RISE_SHAPE);
