@@ -1191,7 +1191,7 @@ export default function Tide({ initial }: { initial: Reading }) {
                 {/* 2. Energy / Workload modifier */}
                 <div>
                   <div className="flex justify-between mb-1">
-                    <span className="text-[var(--foam)]/80">Mentalt batteri & arbeidsro</span>
+                    <label htmlFor="input-vibe-boost" className="text-[var(--foam)]/80">Mentalt batteri & arbeidsro</label>
                     <span id="label-vibe-boost" className="font-mono-tabular font-semibold text-amber-300">Nøytral (0%)</span>
                   </div>
                   <input id="input-vibe-boost" type="range" min="-25" max="25" step="1" defaultValue="0" className="calib-slider" />
