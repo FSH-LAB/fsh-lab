@@ -1180,7 +1180,7 @@ export default function Tide({ initial }: { initial: Reading }) {
                 {/* 1. When does your weekend start? */}
                 <div>
                   <div className="flex justify-between mb-1">
-                    <span className="text-[var(--foam)]/80">Når tar du helg på fredag?</span>
+                    <label htmlFor="input-fri-hour" className="text-[var(--foam)]/80">Når tar du helg på fredag?</label>
                     <span id="label-fri-hour" className="font-mono-tabular font-semibold text-amber-300">16:00</span>
                   </div>
                   <input id="input-fri-hour" type="range" min="11" max="20" step="0.5" defaultValue="16" className="calib-slider" />
