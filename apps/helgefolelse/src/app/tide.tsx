@@ -1116,7 +1116,7 @@ export default function Tide({ initial }: { initial: Reading }) {
             </div>
 
             {/* Center Concept Mode Switcher */}
-            <nav className="flex items-center gap-1 p-1 rounded-2xl glass-panel text-xs font-medium order-3 lg:order-2 w-full lg:w-auto justify-center overflow-x-auto" aria-label="Designkonsepter">
+            <nav className="flex items-center gap-1 p-1 rounded-2xl glass-panel text-xs font-medium order-3 lg:order-2 w-full lg:w-auto justify-start overflow-x-auto" aria-label="Designkonsepter">
               <button type="button" data-mode="classic" className="mode-tab active px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer text-[var(--foam)]/80 whitespace-nowrap">
                 <span>🌊</span>
                 <span>1. Felles Tidevann</span>
