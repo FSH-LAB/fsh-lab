@@ -40,9 +40,10 @@ Every application added to `apps/<app>` must adhere to these contracts:
    - Slug: `^[a-z][a-z0-9-]{1,20}[a-z0-9]$` (3–22 lowercase characters/digits/hyphens).
    - Hard constraint: GCP Service Account character limit requires `<app>-runtime` to be &le; 30 characters.
 2. **Container Contract**:
-   - `apps/<app>/Dockerfile` buildable with context set to the monorepo root.
+   - Next.js applications build using the shared root `Dockerfile` with `--build-arg APP_NAME=<app>`.
+   - Polyglot or custom runtimes provide `apps/<app>/Dockerfile` buildable with monorepo root context.
    - Container must expose and listen on HTTP port `8080` (or respect `$PORT` defaulting to `8080`).
-   - Must execute as an unprivileged, non-root user (e.g. UID 1000).
+   - Must execute as an unprivileged, non-root user (e.g. UID 65532 / nonroot in distroless, or UID 1000).
    - Must pass container vulnerability scans (`trivy` with zero HIGH/CRITICAL unpatched CVEs).
 3. **Operational Health Contract**:
    - Exposes `GET /api/health` returning JSON: `{ "status": "ok", "ready": true, "commit": "<GIT_SHA>", "uptime": <seconds> }`.
@@ -50,13 +51,15 @@ Every application added to `apps/<app>` must adhere to these contracts:
 4. **Candidate Smoke Test Contract**:
    - `apps/<app>/tests/smoke.mjs` verifying candidate revisions using `node --test` in the CI runner before traffic promotion.
    - Receives `SMOKE_URL` and `SHA` environment variables; polls `/api/health` with retry/backoff (up to 60s) until ready, then asserts entrypoint responsiveness.
-5. **Infrastructure Contract (Terraform)**:
-   - Module instance declared in `infra/main.tf` using `./modules/cloud-run-app`.
-   - Service URL registered in `infra/outputs.tf` under `service_urls`.
-6. **Continuous Delivery Contract (GitHub Actions)**:
-   - Push trigger workflow in `.github/workflows/deploy-<app>.yml` invoking reusable `.github/workflows/release-app.yml`.
-   - App listed in `.github/workflows/cd.yml` `workflow_dispatch.inputs.app.options` for rollback/redeploy.
-7. **Task Orchestration (Turborepo Bridging)**:
+5. **Infrastructure Contract (Terraform Zero-Touch Discovery)**:
+   - Declared via `apps/<app>/infra.json` (specifying `displayName`, `public`, `cpu`, `memory`, `minInstances`, `maxInstances`).
+   - Auto-discovered by `infra/main.tf` via `fileset()` and provisioned through `modules/cloud-run-app`.
+   - No manual edits to `.tf` files or local `terraform apply` runs required.
+6. **Continuous Delivery Contract (GitHub Actions Dynamic Matrix)**:
+   - Deployments are fanned out automatically by the root `.github/workflows/deploy.yml` matrix using Turborepo affected package discovery.
+   - No per-app workflow files needed.
+7. **Task Orchestration (Turborepo & Catalogs)**:
+   - Pinned dependencies leverage pnpm catalogs (`"next": "catalog:"`, `"react": "catalog:"`, etc.).
    - `apps/<app>/package.json` exposing scripts: `dev`, `build`, `lint`, `typecheck`, `test`, `test:smoke`.
    - Non-Node runtimes invoke their native toolchains (or clean no-op `node -e 'process.exit(0)'` if not applicable).
 
@@ -98,17 +101,16 @@ Supported flags:
 
 ### Phase 2: Automated Scaffolding
 
-- Run `pnpm scaffold:app <app-name> "[Display Name]" --template <nextjs|minimal>` to generate files and wire Terraform + GitHub Actions.
+- Run `pnpm scaffold:app <app-name> "[Display Name]" --template <nextjs|minimal>` to generate the app files, `infra.json`, and catalog dependencies.
 - Run `pnpm install` to link the workspace package and update `pnpm-lock.yaml`.
 
 ### Phase 3: Runtime Implementation & Port Contract
 
 - Implement your application logic using your language/framework of choice.
 - Implement `GET /api/health` returning JSON: `{ status: "ok", ready: true, commit, uptime }`. Read `GIT_SHA` from environment variables.
-- Configure `apps/<app>/Dockerfile`:
-  - Ensure build context works from repo root.
-  - Expose and listen on port `8080`.
-  - Switch to an unprivileged user (UID 1000) before `CMD`.
+- Containerization:
+  - Next.js applications automatically use the centralized root `Dockerfile` using Google Distroless (`gcr.io/distroless/nodejs24-debian12:nonroot`).
+  - Polyglot or custom runtimes provide `apps/<app>/Dockerfile` exposing port 8080 and switching to a non-root user.
 
 ### Phase 4: Turborepo Task Bridging
 

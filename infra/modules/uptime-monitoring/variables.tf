@@ -28,5 +28,6 @@ variable "monitored_services" {
 variable "status_runtime_service_account_email" {
   type        = string
   description = "Email of the status service account allowed to query BigQuery."
+  default     = ""
 }
 

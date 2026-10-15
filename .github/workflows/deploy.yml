@@ -1,0 +1,94 @@
+name: Deploy
+
+# Orchestrates multi-app continuous delivery to Google Cloud Run.
+# Dynamically discovers affected applications under apps/* via Turborepo and
+# invokes release-app.yml in parallel across a GitHub Actions matrix.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "Dockerfile"
+      - ".nvmrc"
+      - ".dockerignore"
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/release-app.yml"
+      - ".github/workflows/cd.yml"
+  workflow_dispatch:
+    inputs:
+      app:
+        description: Specific application to deploy (leave blank to deploy all affected)
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-orchestrator-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  detect-apps:
+    name: Detect affected apps
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      apps: ${{ steps.filter.outputs.apps }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Cache Turborepo
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7b30a57 # v4.2.0
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+      - name: Find affected apps
+        id: filter
+        env:
+          MANUAL_APP: ${{ inputs.app }}
+        run: |
+          if [ -n "$MANUAL_APP" ]; then
+            [[ "$MANUAL_APP" =~ ^[a-z][a-z0-9-]{1,20}[a-z0-9]$ ]] || { echo "::error::Invalid app: $MANUAL_APP"; exit 1; }
+            [ -d "apps/$MANUAL_APP" ] || { echo "::error::App directory apps/$MANUAL_APP not found"; exit 1; }
+            echo "Manual app specified: $MANUAL_APP"
+            echo "apps=[\"$MANUAL_APP\"]" >> "$GITHUB_OUTPUT"
+          else
+            pnpm install --frozen-lockfile
+            AFFECTED=$(CI=1 pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')
+            echo "Discovered affected apps: $AFFECTED"
+            echo "apps=$AFFECTED" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    name: Release
+    needs: detect-apps
+    if: ${{ needs.detect-apps.outputs.apps != '[]' && needs.detect-apps.outputs.apps != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.detect-apps.outputs.apps) }}
+    permissions:
+      contents: write # Create release tags and check out code.
+      packages: write # Publish container images to GHCR.
+      attestations: write # Publish and verify build provenance.
+      id-token: write # Authenticate to GCP and sign provenance.
+    uses: ./.github/workflows/release-app.yml # zizmor: ignore[self-repository]
+    with:
+      app: ${{ matrix.app }}

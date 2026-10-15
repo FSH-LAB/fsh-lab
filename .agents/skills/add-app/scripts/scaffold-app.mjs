@@ -7,12 +7,11 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
-const TEMPLATES_DIR = path.resolve(__dirname, "../templates");
 
 function printHelp() {
   console.log(`
 Usage:
-  node .agents/skills/add-app/scripts/scaffold-app.mjs <app-name> [display-name] [options]
+  pnpm scaffold:app <app-name> "[display-name]" [options]
 
 Arguments:
   <app-name>              App slug (3-22 lowercase chars/digits/hyphens, e.g. "portal", "api-gateway")
@@ -145,14 +144,6 @@ function detectNextPorts(appsDir) {
   };
 }
 
-function renderTemplate(templatePath, vars) {
-  let content = fs.readFileSync(templatePath, "utf-8");
-  for (const [key, value] of Object.entries(vars)) {
-    content = content.replaceAll(key, value);
-  }
-  return content;
-}
-
 function writeFile(destPath, content, dryRun) {
   if (dryRun) {
     console.log(`[dry-run] Create ${path.relative(REPO_ROOT, destPath)}`);
@@ -161,142 +152,6 @@ function writeFile(destPath, content, dryRun) {
   fs.mkdirSync(path.dirname(destPath), { recursive: true });
   fs.writeFileSync(destPath, content, "utf-8");
   console.log(`Created ${path.relative(REPO_ROOT, destPath)}`);
-}
-
-function updateInfraMain(appName, displayName, dryRun) {
-  const infraMainPath = path.join(REPO_ROOT, "infra/main.tf");
-  if (!fs.existsSync(infraMainPath)) {
-    console.warn(
-      `Warning: ${infraMainPath} not found. Skipping infra/main.tf update.`,
-    );
-    return;
-  }
-
-  let content = fs.readFileSync(infraMainPath, "utf-8");
-  if (content.includes(`module "${appName}"`)) {
-    console.log(
-      `infra/main.tf already contains module "${appName}". Skipping.`,
-    );
-    return;
-  }
-
-  const moduleBlock = `
-module "${appName}" {
-  source = "./modules/cloud-run-app"
-
-  app            = "${appName}"
-  display_name   = "${displayName}"
-  project_id     = google_project.environment.project_id
-  region         = local.region
-  deployer_email = google_service_account.deployer.email
-
-  depends_on = [google_project_service.required]
-}
-`;
-
-  const movedIndex = content.indexOf("moved {");
-  if (movedIndex !== -1) {
-    content =
-      content.slice(0, movedIndex) +
-      moduleBlock +
-      "\n" +
-      content.slice(movedIndex);
-  } else {
-    content += moduleBlock;
-  }
-
-  if (dryRun) {
-    console.log(
-      `[dry-run] Update infra/main.tf to declare module "${appName}"`,
-    );
-  } else {
-    fs.writeFileSync(infraMainPath, content, "utf-8");
-    console.log(`Updated infra/main.tf (added module "${appName}")`);
-  }
-}
-
-function updateInfraOutputs(appName, dryRun) {
-  const outputsPath = path.join(REPO_ROOT, "infra/outputs.tf");
-  if (!fs.existsSync(outputsPath)) {
-    console.warn(
-      `Warning: ${outputsPath} not found. Skipping infra/outputs.tf update.`,
-    );
-    return;
-  }
-
-  let content = fs.readFileSync(outputsPath, "utf-8");
-  if (
-    content.includes(`    ${appName} = `) ||
-    content.includes(`    ${appName} =`)
-  ) {
-    console.log(
-      `infra/outputs.tf already contains output for "${appName}". Skipping.`,
-    );
-    return;
-  }
-
-  const match = content.match(
-    /output\s+"service_urls"\s*\{[\s\S]*?value\s*=\s*\{([\s\S]*?)\}/,
-  );
-  if (match) {
-    const existingEntries = match[1];
-    const newEntry = `    ${appName} = module.${appName}.service_url\n`;
-    const updatedEntries = existingEntries.trimEnd() + "\n" + newEntry;
-    content = content.replace(existingEntries, updatedEntries + "  ");
-
-    if (dryRun) {
-      console.log(
-        `[dry-run] Update infra/outputs.tf to include "${appName}" in service_urls`,
-      );
-    } else {
-      fs.writeFileSync(outputsPath, content, "utf-8");
-      console.log(
-        `Updated infra/outputs.tf (added "${appName}" to service_urls)`,
-      );
-    }
-  } else {
-    console.warn(
-      'Warning: Could not find output "service_urls" map in infra/outputs.tf.',
-    );
-  }
-}
-
-function updateCdWorkflow(appName, dryRun) {
-  const cdPath = path.join(REPO_ROOT, ".github/workflows/cd.yml");
-  if (!fs.existsSync(cdPath)) {
-    console.warn(
-      `Warning: ${cdPath} not found. Skipping .github/workflows/cd.yml update.`,
-    );
-    return;
-  }
-
-  let content = fs.readFileSync(cdPath, "utf-8");
-  const dispatchAppMatch = content.match(
-    /(workflow_dispatch:[\s\S]*?app:\s*[\s\S]*?options:\s*\[)(.*?)(\])/,
-  );
-  if (dispatchAppMatch) {
-    const rawOptions = dispatchAppMatch[2];
-    const options = rawOptions
-      .split(",")
-      .map((o) => o.trim())
-      .filter(Boolean);
-    if (!options.includes(appName)) {
-      options.push(appName);
-      const updatedSection = `${dispatchAppMatch[1]}${options.join(", ")}${dispatchAppMatch[3]}`;
-      content = content.replace(dispatchAppMatch[0], updatedSection);
-
-      if (dryRun) {
-        console.log(
-          `[dry-run] Update .github/workflows/cd.yml app options: [${options.join(", ")}]`,
-        );
-      } else {
-        fs.writeFileSync(cdPath, content, "utf-8");
-        console.log(
-          `Updated .github/workflows/cd.yml (added "${appName}" to workflow_dispatch choices)`,
-        );
-      }
-    }
-  }
 }
 
 async function main() {
@@ -329,141 +184,376 @@ async function main() {
   }
   console.log(`  Target Dir:   apps/${appName}\n`);
 
-  const vars = {
-    __APP_NAME__: appName,
-    __DISPLAY_NAME__: displayName,
-    __PORT__: devPort.toString(),
-    __E2E_PORT__: e2ePort.toString(),
-  };
+  const files = {};
 
-  // 1. Universal platform boundary templates (all apps)
-  const universalMappings = [
-    {
-      tpl: path.join(TEMPLATES_DIR, "universal/deploy-workflow.yml.template"),
-      dest: `.github/workflows/deploy-${appName}.yml`,
-    },
-    {
-      tpl: path.join(TEMPLATES_DIR, "universal/smoke.mjs.template"),
-      dest: `apps/${appName}/tests/smoke.mjs`,
-    },
-  ];
+  // 1. Universal app files
+  files[`apps/${appName}/infra.json`] =
+    JSON.stringify(
+      {
+        displayName,
+        public: true,
+        cpu: "1000m",
+        memory: "512Mi",
+        minInstances: 0,
+        maxInstances: 3,
+      },
+      null,
+      2,
+    ) + "\n";
 
-  // 2. Language/Runtime specific templates
-  let stackMappings = [];
+  files[`apps/${appName}/tests/smoke.mjs`] =
+    `import assert from "node:assert/strict";
+import test from "node:test";
+
+const smokeUrl = process.env.SMOKE_URL?.replace(/\\/$/, "");
+const expectedSha = process.env.SHA;
+
+if (!smokeUrl || !expectedSha) {
+  console.error("SMOKE_URL and SHA environment variables are required.");
+  process.exit(1);
+}
+
+test("${appName} candidate revision responds on health check", async () => {
+  const deadline = Date.now() + 60_000;
+  let lastError;
+
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(\`\${smokeUrl}/api/health\`);
+      if (res.ok) {
+        const data = await res.json();
+        assert.equal(data.status, "ok");
+        assert.equal(data.ready, true);
+        assert.equal(data.commit, expectedSha);
+        return;
+      }
+      lastError = new Error(\`Unexpected HTTP status: \${res.status}\`);
+    } catch (err) {
+      lastError = err;
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  throw lastError || new Error("Timed out waiting for candidate health check");
+});
+`;
+
   if (template === "nextjs") {
-    stackMappings = [
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/package.json.template"),
-        dest: `apps/${appName}/package.json`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/tsconfig.json.template"),
-        dest: `apps/${appName}/tsconfig.json`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/eslint.config.mjs.template"),
-        dest: `apps/${appName}/eslint.config.mjs`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/next.config.ts.template"),
-        dest: `apps/${appName}/next.config.ts`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/postcss.config.mjs.template"),
-        dest: `apps/${appName}/postcss.config.mjs`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/vitest.config.mts.template"),
-        dest: `apps/${appName}/vitest.config.mts`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/playwright.config.ts.template"),
-        dest: `apps/${appName}/playwright.config.ts`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/Dockerfile.template"),
-        dest: `apps/${appName}/Dockerfile`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/README.md.template"),
-        dest: `apps/${appName}/README.md`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/health.route.ts.template"),
-        dest: `apps/${appName}/src/app/api/health/route.ts`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/health.route.test.ts.template"),
-        dest: `apps/${appName}/src/app/api/health/route.test.ts`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/layout.tsx.template"),
-        dest: `apps/${appName}/src/app/layout.tsx`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/page.tsx.template"),
-        dest: `apps/${appName}/src/app/page.tsx`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "nextjs/globals.css.template"),
-        dest: `apps/${appName}/src/app/globals.css`,
-      },
-    ];
+    files[`apps/${appName}/package.json`] =
+      JSON.stringify(
+        {
+          name: appName,
+          version: "0.1.0",
+          private: true,
+          scripts: {
+            dev: `next dev --port ${devPort}`,
+            build: "next build --webpack",
+            start: "next start --port 8080",
+            lint: "eslint",
+            typecheck: "next typegen && tsc --noEmit",
+            test: "vitest run",
+            "test:e2e": "playwright test",
+            "test:smoke": "node --test tests/smoke.mjs",
+          },
+          dependencies: {
+            next: "catalog:",
+            react: "catalog:",
+            "react-dom": "catalog:",
+          },
+          devDependencies: {
+            "@playwright/test": "catalog:",
+            "@repo/eslint-config": "workspace:*",
+            "@repo/typescript-config": "workspace:*",
+            "@tailwindcss/postcss": "catalog:",
+            "@types/node": "catalog:",
+            "@types/react": "catalog:",
+            "@types/react-dom": "catalog:",
+            eslint: "catalog:",
+            tailwindcss: "catalog:",
+            typescript: "catalog:",
+            vitest: "catalog:",
+          },
+        },
+        null,
+        2,
+      ) + "\n";
+
+    files[`apps/${appName}/tsconfig.json`] =
+      JSON.stringify(
+        {
+          extends: "@repo/typescript-config/nextjs.json",
+          compilerOptions: {
+            plugins: [{ name: "next" }],
+            paths: {
+              "@/*": ["./src/*"],
+            },
+          },
+          include: [
+            "next-env.d.ts",
+            "**/*.ts",
+            "**/*.tsx",
+            ".next/types/**/*.ts",
+          ],
+          exclude: ["node_modules"],
+        },
+        null,
+        2,
+      ) + "\n";
+
+    files[`apps/${appName}/eslint.config.mjs`] =
+      `import nextConfig from "@repo/eslint-config/next";
+
+export default nextConfig;
+`;
+
+    files[`apps/${appName}/next.config.ts`] =
+      `import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  output: "standalone",
+};
+
+export default nextConfig;
+`;
+
+    files[`apps/${appName}/postcss.config.mjs`] = `export default {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+`;
+
+    files[`apps/${appName}/vitest.config.mts`] =
+      `import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    environment: "node",
+  },
+});
+`;
+
+    files[`apps/${appName}/playwright.config.ts`] =
+      `import { defineConfig, devices } from "@playwright/test";
+
+const PORT = ${e2ePort};
+const BASE_URL = \`http://localhost:\${PORT}\`;
+
+export default defineConfig({
+  testDir: "./e2e",
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: "html",
+  use: {
+    baseURL: BASE_URL,
+    trace: "on-first-retry",
+  },
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+    },
+  ],
+  webServer: {
+    command: \`pnpm start --port \${PORT}\`,
+    url: BASE_URL,
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
+});
+`;
+
+    files[`apps/${appName}/src/app/api/health/route.ts`] =
+      `import { NextResponse } from "next/server";
+
+const startTime = Date.now();
+
+export function GET() {
+  const commit = process.env.GIT_SHA || "development";
+  const uptime = Math.floor((Date.now() - startTime) / 1000);
+
+  return NextResponse.json({
+    status: "ok",
+    ready: true,
+    commit,
+    uptime,
+    app: "${appName}",
+  });
+}
+`;
+
+    files[`apps/${appName}/src/app/api/health/route.test.ts`] =
+      `import { describe, expect, it } from "vitest";
+import { GET } from "./route";
+
+describe("GET /api/health", () => {
+  it("returns operational health status payload", async () => {
+    const res = await GET();
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.status).toBe("ok");
+    expect(json.ready).toBe(true);
+    expect(json.app).toBe("${appName}");
+  });
+});
+`;
+
+    files[`apps/${appName}/src/app/layout.tsx`] =
+      `import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "${displayName}",
+  description: "${displayName} application on FSH-LAB",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}
+`;
+
+    files[`apps/${appName}/src/app/page.tsx`] =
+      `export default function HomePage() {
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center p-8 text-center">
+      <h1 className="text-4xl font-bold tracking-tight text-neutral-900">${displayName}</h1>
+      <p className="mt-4 text-lg text-neutral-600">
+        Deployed to Google Cloud Run via FSH-LAB GitOps automation.
+      </p>
+    </main>
+  );
+}
+`;
+
+    files[`apps/${appName}/src/app/globals.css`] = `@import "tailwindcss";
+`;
+
+    files[`apps/${appName}/README.md`] = `# ${displayName} (\`apps/${appName}\`)
+
+Next.js application within the FSH-LAB monorepo.
+
+## Development
+
+\`\`\`sh
+pnpm --filter ${appName} dev
+\`\`\`
+
+## Build & Test
+
+\`\`\`sh
+pnpm --filter ${appName} build
+pnpm --filter ${appName} test
+\`\`\`
+`;
   } else if (template === "minimal") {
-    stackMappings = [
-      {
-        tpl: path.join(TEMPLATES_DIR, "minimal/package.json.template"),
-        dest: `apps/${appName}/package.json`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "minimal/server.mjs.template"),
-        dest: `apps/${appName}/server.mjs`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "minimal/Dockerfile.template"),
-        dest: `apps/${appName}/Dockerfile`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "minimal/tests/health.test.mjs.template"),
-        dest: `apps/${appName}/tests/health.test.mjs`,
-      },
-      {
-        tpl: path.join(TEMPLATES_DIR, "minimal/README.md.template"),
-        dest: `apps/${appName}/README.md`,
-      },
-    ];
+    files[`apps/${appName}/package.json`] =
+      JSON.stringify(
+        {
+          name: appName,
+          version: "0.1.0",
+          private: true,
+          type: "module",
+          scripts: {
+            dev: `node --watch server.mjs --port ${devPort}`,
+            build: "node -e 'process.exit(0)'",
+            lint: "node -e 'process.exit(0)'",
+            typecheck: "node -e 'process.exit(0)'",
+            test: "node --test tests/*.test.mjs",
+            "test:smoke": "node --test tests/smoke.mjs",
+          },
+        },
+        null,
+        2,
+      ) + "\n";
+
+    files[`apps/${appName}/server.mjs`] = `import http from "node:http";
+
+const PORT = parseInt(process.env.PORT || "${devPort}", 10);
+const startTime = Date.now();
+
+const server = http.createServer((req, res) => {
+  if (req.url === "/api/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        status: "ok",
+        ready: true,
+        commit: process.env.GIT_SHA || "development",
+        uptime: Math.floor((Date.now() - startTime) / 1000),
+      }),
+    );
+    return;
   }
 
-  const allFiles = [...universalMappings, ...stackMappings];
+  res.writeHead(200, { "Content-Type": "text/html" });
+  res.end("<h1>${displayName}</h1>");
+});
 
-  for (const { tpl, dest } of allFiles) {
-    const destPath = path.join(REPO_ROOT, dest);
-    const rendered = renderTemplate(tpl, vars);
-    writeFile(destPath, rendered, dryRun);
+server.listen(PORT, () => {
+  console.log(\`${appName} listening on port \${PORT}\`);
+});
+`;
+
+    files[`apps/${appName}/Dockerfile`] = `FROM node:24-slim
+WORKDIR /app
+COPY package.json server.mjs ./
+EXPOSE 8080
+USER 1000
+CMD ["node", "server.mjs"]
+`;
+
+    files[`apps/${appName}/tests/health.test.mjs`] =
+      `import assert from "node:assert/strict";
+import test from "node:test";
+
+test("sanity check", () => {
+  assert.equal(1 + 1, 2);
+});
+`;
+
+    files[`apps/${appName}/README.md`] = `# ${displayName} (\`apps/${appName}\`)
+
+Application within the FSH-LAB monorepo.
+`;
   }
 
-  // Update Infrastructure & CI/CD (Universal for all apps)
-  updateInfraMain(appName, displayName, dryRun);
-  updateInfraOutputs(appName, dryRun);
-  updateCdWorkflow(appName, dryRun);
+  for (const [relPath, content] of Object.entries(files)) {
+    const destPath = path.join(REPO_ROOT, relPath);
+    writeFile(destPath, content, dryRun);
+  }
 
-  console.log(`\n[Success] Scaffolding completed.`);
-  console.log(`\nNext Steps:`);
-  console.log(`  1. Run "pnpm install" to register the app in the workspace.`);
+  console.log(`\n[Success] App "${appName}" scaffolded successfully!`);
+  console.log(`\nZero-Touch GitOps Lifecycle:`);
   console.log(
-    `  2. Ensure your container exposes port 8080 and implements GET /api/health.`,
+    `  - Manifest:     apps/${appName}/infra.json created with Cloud Run defaults.`,
   );
-  console.log(`  3. Verify verification gates:`);
   console.log(
-    `     pnpm turbo run lint typecheck test build --filter=${appName}...`,
+    `  - Dependencies: package.json linked with pnpm workspace catalogs.`,
   );
-  console.log(`     terraform -chdir=infra init -backend=false`);
-  console.log(`     terraform -chdir=infra validate`);
-  console.log(`     terraform -chdir=infra test`);
-  console.log(`     pnpm lint:workflows`);
   console.log(
-    `  4. (Optional) Register the app in "apps/status/src/lib/services.ts" for uptime monitoring.\n`,
+    `  - Dockerfile:   Next.js builds use centralized root Dockerfile.`,
   );
+  console.log(`  - Infrastructure: Auto-discovered by Terraform on PR/merge.`);
+  console.log(
+    `  - Deployments:  Auto-discovered by .github/workflows/deploy.yml matrix on merge.\n`,
+  );
+  console.log(`Next steps:`);
+  console.log(`  1. Run "pnpm install"`);
+  console.log(
+    `  2. Run "pnpm turbo run lint typecheck test build --filter=${appName}..."`,
+  );
+  console.log(`  3. Commit and open a PR!\n`);
 }
 
 main().catch((err) => {

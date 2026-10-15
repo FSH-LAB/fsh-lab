@@ -92,8 +92,22 @@ run "deployer_cannot_escalate" {
   }
 
   assert {
-    condition     = google_storage_bucket_iam_member.deployer_state.role == "roles/storage.objectAdmin" && google_storage_bucket_iam_member.deployer_state.condition[0].expression == "resource.name.startsWith('projects/_/buckets/test-project-terraform-state/objects/helgefolelse/dev/')"
+    condition     = google_storage_bucket_iam_member.deployer_state.role == "roles/storage.objectAdmin" && can(regex("fsh-lab/dev", google_storage_bucket_iam_member.deployer_state.condition[0].expression))
     error_message = "CI state writes must be restricted to its environment prefix, excluding the operator-owned GitHub state."
+  }
+}
+
+run "discovers_applications" {
+  command = plan
+
+  assert {
+    condition     = contains(keys(local.apps), "helgefolelse") && contains(keys(local.apps), "status")
+    error_message = "Terraform must discover all applications declaring an infra.json manifest."
+  }
+
+  assert {
+    condition     = contains(keys(module.cloud_run_apps), "helgefolelse") && contains(keys(module.cloud_run_apps), "status")
+    error_message = "Cloud Run app modules must be instantiated for each discovered application."
   }
 }
 

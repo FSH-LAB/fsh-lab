@@ -6,34 +6,29 @@ All environments use `europe-north2`. The region is fixed in Terraform to match 
 
 | Root            | Manages                                                                                       | State                                                               |
 | --------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `infra/`        | GCP project, APIs, state bucket, Artifact Registry, Cloud Run, service accounts, IAM and OIDC | `gs://<project>-terraform-state/helgefolelse/<env>`                 |
+| `infra/`        | GCP project, APIs, state bucket, Artifact Registry, Cloud Run, service accounts, IAM and OIDC | `gs://<project>-terraform-state/fsh-lab/<env>`                      |
 | `infra/github/` | GitHub environments, reviewers, branch policy and deployment variables                        | `gs://generated-mote-510411-v8-terraform-state/helgefolelse/github` |
 
-Terraform owns infrastructure; the deploy workflow owns the image, `GIT_SHA`, revisions and traffic. Those release fields are ignored by Terraform. CI cannot change project IAM, service accounts or OIDC trust, so those changes require an operator. Deletion protection is enabled on core resources.
+Terraform owns infrastructure; the deploy workflow owns the image, `GIT_SHA`, revisions and traffic. Those release fields are ignored by Terraform. Deletion protection is enabled on core resources.
 
-The deployer can write state and lock objects only under `helgefolelse/<env>/`. It cannot write the operator-owned `helgefolelse/github/` prefix or change bucket IAM/settings. Project read roles still allow reading state; this is write isolation, not confidentiality isolation.
+The deployer can write state and lock objects under `fsh-lab/<env>/` (and legacy `helgefolelse/<env>/`). It cannot write the operator-owned `helgefolelse/github/` prefix or change bucket IAM/settings.
 
-## Application Modules (`infra/modules/cloud-run-app`)
+## Application Manifest Discovery (`infra/modules/cloud-run-app`)
 
-Each application in the monorepo is declared using the `cloud-run-app` module in `infra/main.tf`:
+Applications in the monorepo are dynamically discovered from their local manifests (`apps/*/infra.json`) using Terraform's `fileset()` function:
 
 - Provisions a dedicated Artifact Registry repository (`projects/<project>/locations/<region>/repositories/<app>`)
 - Creates an isolated Cloud Run runtime service account (`<app>-runtime@...`)
-- Deploys the Cloud Run service (`<app>-web`) with deletion protection and candidate traffic tagging
+- Deploys the Cloud Run service (`<app>-web`) with deletion protection, configured resource limits (CPU/Memory/Scaling), and candidate traffic tagging
 - Grants the deployer service account permission to act as the app runtime identity
 
-To add a new application to the environment, declare a new module instance in `infra/main.tf`:
+To add a new application to the environment, run:
 
-```hcl
-module "my_app" {
-  source         = "./modules/cloud-run-app"
-  app            = "my-app"
-  display_name   = "My Application"
-  project_id     = google_project.environment.project_id
-  region         = local.region
-  deployer_email = google_service_account.deployer.email
-}
+```sh
+pnpm scaffold:app <name> "[Display Name]"
 ```
+
+This creates `apps/<name>/infra.json`. No changes to `.tf` files are required.
 
 To roll out this permission boundary, pause deployments and apply the GCP root with operator credentials in each environment. The plan must add the conditional bucket grant. It removes the deployer's project-wide `roles/storage.admin` grant only if that grant was already tracked in this state; additive IAM resources do not remove unmanaged grants. CI cannot apply this IAM change itself.
 

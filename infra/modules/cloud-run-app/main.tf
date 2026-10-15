@@ -56,16 +56,36 @@ resource "google_cloud_run_v2_service" "this" {
   location             = var.region
   deletion_protection  = true
   ingress              = "INGRESS_TRAFFIC_ALL"
-  invoker_iam_disabled = true
+  invoker_iam_disabled = var.is_public
 
   template {
     service_account = google_service_account.runtime.email
 
+    scaling {
+      min_instance_count = var.min_instances
+      max_instance_count = var.max_instances
+    }
+
     containers {
       image = "us-docker.pkg.dev/cloudrun/container/hello"
 
+      resources {
+        limits = {
+          cpu    = var.cpu
+          memory = var.memory
+        }
+      }
+
       ports {
         container_port = 8080
+      }
+
+      dynamic "env" {
+        for_each = var.env_vars
+        content {
+          name  = env.key
+          value = env.value
+        }
       }
     }
   }

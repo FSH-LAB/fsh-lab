@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - "infra/**"
+      - "apps/**/infra.json"
+      - ".github/workflows/infra.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "apps/**/infra.json"
       - ".github/workflows/infra.yml"
   workflow_dispatch:
     inputs:
@@ -12,7 +19,7 @@ on:
         description: Environment to apply
         required: true
         type: choice
-        options: [dev, production]
+        options: [dev, production, all]
 
 permissions:
   contents: read
@@ -46,7 +53,7 @@ jobs:
   apply-dev:
     name: Apply dev
     needs: validate
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.environment == 'dev' || inputs.environment == 'all'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: dev
@@ -68,14 +75,14 @@ jobs:
         with:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          service_account: ${{ vars.GCP_INFRA_SERVICE_ACCOUNT || vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
       - name: Apply dev infrastructure
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           terraform -chdir=infra init -input=false -lockfile=readonly \
             -backend-config="bucket=$PROJECT_ID-terraform-state" \
-            -backend-config="prefix=helgefolelse/dev"
+            -backend-config="prefix=fsh-lab/dev"
           terraform -chdir=infra apply -input=false -auto-approve -lock-timeout=5m \
             -var-file="environments/dev.tfvars"
 
@@ -86,7 +93,7 @@ jobs:
       always() &&
       needs.validate.result == 'success' &&
       (needs.apply-dev.result == 'success' || needs.apply-dev.result == 'skipped') &&
-      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production'))
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.environment == 'production' || inputs.environment == 'all')))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -108,13 +115,13 @@ jobs:
         with:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          service_account: ${{ vars.GCP_INFRA_SERVICE_ACCOUNT || vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
       - name: Apply production infrastructure
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           terraform -chdir=infra init -input=false -lockfile=readonly \
             -backend-config="bucket=$PROJECT_ID-terraform-state" \
-            -backend-config="prefix=helgefolelse/production"
+            -backend-config="prefix=fsh-lab/production"
           terraform -chdir=infra apply -input=false -auto-approve -lock-timeout=5m \
             -var-file="environments/production.tfvars"
