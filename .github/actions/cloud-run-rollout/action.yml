@@ -96,10 +96,10 @@ runs:
           digest="$(docker buildx imagetools inspect "$image:$sha" --format '{{ .Manifest.Digest }}')"
         fi
         # Only images built and attested by CI on main are deployable.
-        # _deploy-app.yml signs current builds. release-app.yml and ci-cd.yml signed
-        # historical releases; retain them to allow rollbacks to prior versions.
+        # _cd-app.yml signs current builds. _deploy-app.yml, release-app.yml, and
+        # ci-cd.yml signed historical releases; retain them to allow rollbacks to prior versions.
         verified=false
-        for signer in _deploy-app.yml release-app.yml ci-cd.yml; do
+        for signer in _cd-app.yml _deploy-app.yml release-app.yml ci-cd.yml; do
           if gh attestation verify "oci://$image@$digest" --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/$signer" \
             --source-ref refs/heads/main --deny-self-hosted-runners; then

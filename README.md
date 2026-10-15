@@ -71,13 +71,13 @@ Adding a new application is powered by zero-touch GitOps discovery:
 
 3. **Merge to `main`**:
    - `infra.yml` provisions the Cloud Run service shell with the initial placeholder image via scoped infrastructure automation.
-   - `deploy.yml` dynamically detects the changed application via Turborepo, builds the production container using the centralized root `Dockerfile` (`gcr.io/distroless/nodejs24-debian12:nonroot`), runs candidate revision smoke tests, and promotes traffic.
+   - `cd.yml` dynamically detects the changed application via Turborepo, builds the production container using the centralized root `Dockerfile` (`gcr.io/distroless/nodejs24-debian12:nonroot`), runs candidate revision smoke tests, and promotes traffic.
 
 No manual `.tf` edits, per-app workflows, or operator pre-apply steps are required.
 
 ## Architecture & CI/CD
 
 - **CI (`.github/workflows/ci.yml`)**: Runs on pull requests and pushes to `main`. Leverages Turborepo affected filtering (`--affected`) and remote/workflow action caching to test changed packages and their dependents rapidly.
-- **CD (`.github/workflows/deploy.yml` -> `_deploy-app.yml` -> `.github/actions/cloud-run-rollout`)**: Dynamic matrix orchestrator detects affected apps under `apps/*`, builds minimal Distroless containers with BuildKit caching, scans with Trivy, attests provenance, and deploys to Google Cloud Run across `dev` and `production` (with manual rollbacks enabled via `rollback.yml`).
+- **CD (`.github/workflows/cd.yml` -> `_cd-app.yml` -> `.github/actions/cloud-run-rollout`)**: Dynamic matrix orchestrator detects affected apps under `apps/*`, builds minimal Distroless containers with BuildKit caching, scans with Trivy, attests provenance, and deploys to Google Cloud Run across `dev` and `production` (with manual rollbacks enabled via `rollback.yml`).
 - **Candidate Verification**: Deployments roll out to a tagged `--no-traffic` candidate revision first, run automated smoke tests against the candidate URL, and only promote traffic to 100% upon success.
 - **Infrastructure (`infra/`)**: Reusable Terraform modules (`infra/modules/cloud-run-app`) with auto-discovery of `apps/*/infra.json` manifests deployed via `.github/workflows/infra.yml`. Workload Identity Federation (WIF) eliminates long-lived service account keys.

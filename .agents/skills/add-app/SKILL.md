@@ -55,7 +55,7 @@ Every application added to `apps/<app>` must adhere to these contracts:
    - Auto-discovered by `infra/main.tf` via `fileset()` and provisioned through `modules/cloud-run-app`.
    - No manual edits to `.tf` files or local `terraform apply` runs required.
 6. **Continuous Delivery Contract (GitHub Actions Dynamic Matrix)**:
-   - Deployments are fanned out automatically by the root `.github/workflows/deploy.yml` matrix using Turborepo affected package discovery.
+   - Deployments are fanned out automatically by the root `.github/workflows/cd.yml` matrix using Turborepo affected package discovery.
    - No per-app workflow files needed.
 7. **Task Orchestration (Turborepo & Catalogs)**:
    - Pinned dependencies leverage pnpm catalogs (`"next": "catalog:"`, `"react": "catalog:"`, etc.).
@@ -256,7 +256,7 @@ test("candidate revision smoke verification", async () => {
 1. Implement application code under `apps/<app>/src`.
 2. Implement `GET /api/health` returning JSON `{ status: "ok", ready: true, commit, uptime }`.
 3. Containerization:
-   - Next.js applications automatically build with the root `Dockerfile` using Google Distroless (`gcr.io/distroless/nodejs24-debian12:nonroot`).
+   - Next.js applications automatically build with the root `Dockerfile` using Google Distroless (`gcr.io/distroless/nodejs24-debian13:nonroot`).
    - Polyglot or custom runtimes provide `apps/<app>/Dockerfile` exposing port `8080` and executing as an unprivileged non-root user.
 
 ### Phase 4: Candidate Smoke Test

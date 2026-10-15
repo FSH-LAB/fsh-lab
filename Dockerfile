@@ -25,7 +25,7 @@ RUN pnpm turbo run build --filter=${APP_NAME} && \
     mkdir -p "apps/${APP_NAME}/.next/standalone/apps/${APP_NAME}/.next/cache" && \
     ln -s "apps/${APP_NAME}/server.js" "apps/${APP_NAME}/.next/standalone/server.js"
 
-FROM gcr.io/distroless/nodejs24-debian12:nonroot AS runner
+FROM gcr.io/distroless/nodejs24-debian13:nonroot AS runner
 ARG APP_NAME
 WORKDIR /app
 ENV NODE_ENV=production PORT=8080 HOSTNAME=0.0.0.0

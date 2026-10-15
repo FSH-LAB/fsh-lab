@@ -1,8 +1,8 @@
-name: Deploy
+name: CD
 
 # Orchestrates multi-app continuous delivery to Google Cloud Run.
 # Dynamically discovers affected applications under apps/* via Turborepo and
-# invokes _deploy-app.yml in parallel across a GitHub Actions matrix.
+# invokes _cd-app.yml in parallel across a GitHub Actions matrix.
 
 on:
   push:
@@ -17,8 +17,8 @@ on:
       - "Dockerfile"
       - ".nvmrc"
       - ".dockerignore"
-      - ".github/workflows/deploy.yml"
-      - ".github/workflows/_deploy-app.yml"
+      - ".github/workflows/cd.yml"
+      - ".github/workflows/_cd-app.yml"
       - ".github/actions/**"
   workflow_dispatch:
     inputs:
@@ -32,7 +32,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-orchestrator-${{ github.ref }}
+  group: cd-orchestrator-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -79,6 +79,6 @@ jobs:
       packages: write # Publish container images to GHCR.
       attestations: write # Publish and verify build provenance.
       id-token: write # Authenticate to GCP and sign provenance.
-    uses: ./.github/workflows/_deploy-app.yml # zizmor: ignore[self-repository]
+    uses: ./.github/workflows/_cd-app.yml # zizmor: ignore[self-repository]
     with:
       app: ${{ matrix.app }}

@@ -1,7 +1,7 @@
-name: Deploy app
+name: CD app
 
 # Reusable pipeline for one app: verify, build, scan and attest an image, deploy it
-# through dev and production, then tag the release. Called dynamically by deploy.yml.
+# through dev and production, then tag the release. Called dynamically by cd.yml.
 #
 # Conventions (enforced by infra/modules/cloud-run-app):
 #   apps/<app>/Dockerfile          image build

@@ -4,6 +4,9 @@ packages:
 allowBuilds:
   unrs-resolver: false
 
+overrides:
+  source-map-js: ^1.2.2
+
 catalog:
   "@playwright/test": ^1.64.0
   "@tailwindcss/postcss": ^4
