@@ -30,12 +30,9 @@ jobs:
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository]
         with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - run: pnpm install --frozen-lockfile
+          install: "true"
       - run: pnpm format:check
       - name: Install actionlint
         env:
@@ -106,7 +103,9 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/helgefolelse/Dockerfile
+          file: Dockerfile
+          build-args: |
+            APP_NAME=helgefolelse
           load: true
           tags: helgefolelse-web:ci
           cache-from: type=gha,scope=helgefolelse-web

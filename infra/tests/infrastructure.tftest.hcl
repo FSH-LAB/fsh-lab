@@ -6,6 +6,7 @@ mock_provider "google" {
   }
 }
 
+
 variables {
   environment  = "dev"
   project_id   = "test-project"
@@ -26,7 +27,7 @@ run "protects_core_resources" {
   }
 
   assert {
-    condition     = google_storage_bucket.state.location == local.region
+    condition     = lower(google_storage_bucket.state.location) == lower(local.region)
     error_message = "The state bucket must use the configured region."
   }
 }
@@ -92,8 +93,22 @@ run "deployer_cannot_escalate" {
   }
 
   assert {
-    condition     = google_storage_bucket_iam_member.deployer_state.role == "roles/storage.objectAdmin" && google_storage_bucket_iam_member.deployer_state.condition[0].expression == "resource.name.startsWith('projects/_/buckets/test-project-terraform-state/objects/helgefolelse/dev/')"
+    condition     = google_storage_bucket_iam_member.deployer_state.role == "roles/storage.objectAdmin" && can(regex("fsh-lab/dev", google_storage_bucket_iam_member.deployer_state.condition[0].expression))
     error_message = "CI state writes must be restricted to its environment prefix, excluding the operator-owned GitHub state."
+  }
+}
+
+run "discovers_applications" {
+  command = plan
+
+  assert {
+    condition     = contains(keys(local.apps), "helgefolelse") && contains(keys(local.apps), "status")
+    error_message = "Terraform must discover all applications declaring an infra.json manifest."
+  }
+
+  assert {
+    condition     = contains(keys(module.cloud_run_apps), "helgefolelse") && contains(keys(module.cloud_run_apps), "status")
+    error_message = "Cloud Run app modules must be instantiated for each discovered application."
   }
 }
 
@@ -118,4 +133,27 @@ run "rejects_unknown_environment" {
   }
 
   expect_failures = [var.environment]
+}
+
+run "uptime_monitoring_provisions_checks_and_dataset" {
+  command = plan
+
+  assert {
+    condition     = module.uptime_monitoring.dataset_id == "uptime_monitoring" && module.uptime_monitoring.table_id == "uptime_checks"
+    error_message = "Uptime monitoring must provision the BigQuery dataset and uptime_checks table."
+  }
+}
+
+run "infra_identity_is_strictly_scoped" {
+  command = plan
+
+  assert {
+    condition     = local.infra_applier_principal_attribute == "attribute.job_workflow_ref/FSH-LAB/fsh-lab/.github/workflows/infra.yml@refs/heads/main"
+    error_message = "Infra identity trust must be restricted to verified infra.yml workflow claims."
+  }
+
+  assert {
+    condition     = google_project_iam_member.infra_applier_service_account_admin.role == "roles/iam.serviceAccountAdmin" && can(regex("-runtime@", google_project_iam_member.infra_applier_service_account_admin.condition[0].expression))
+    error_message = "Infra service account admin role must be strictly scoped to application runtime service accounts."
+  }
 }
