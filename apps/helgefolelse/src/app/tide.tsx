@@ -403,14 +403,14 @@ export default function Tide({ initial }: { initial: Reading }) {
           const i = BAND_ORDER.length - 1 - revIdx;
           const pct = i * 20 + 10;
           return `
-            <div id="staff-label-${band}"
+            <button type="button" id="staff-label-${band}"
                  style="position: absolute; top: ${100 - pct}%; left: ${staff.major + 8}px; transform: translateY(-50%);"
                  class="staff-label flex items-center gap-2 pointer-events-auto cursor-pointer group"
                  data-target-band="${band}">
               <span class="text-[11px] sm:text-xs font-medium tracking-wide text-[var(--foam)]/40 group-hover:text-[var(--foam)] transition-colors whitespace-nowrap">
                 ${BANDS[band].label}
               </span>
-            </div>
+            </button>
           `;
         }).join("");
 
