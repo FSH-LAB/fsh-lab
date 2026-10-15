@@ -34,7 +34,6 @@ export default function Tide({ initial }: { initial: Reading }) {
       over:  { label: "Over hodet", range: "80–100%", desc: "Helt oppslukt av helgefølelsen" }
     };
 
-    const WEEKDAY_NAMES_NO = ["", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søndag"];
     const WEEKDAY_SHORT_NO = ["", "Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"];
     const WEEKDAY_INDEX: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
 
