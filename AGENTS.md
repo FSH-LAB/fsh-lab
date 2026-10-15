@@ -10,6 +10,8 @@ Monorepo managed with **pnpm** workspaces and **Turborepo**, hosting independent
 - `packages/*` — Shared internal libraries, tooling, and configurations (`@repo/*` namespace):
   - `packages/typescript-config` — Shared TypeScript configurations (`@repo/typescript-config`).
   - `packages/eslint-config` — Shared ESLint configurations (`@repo/eslint-config`).
+  - `packages/playwright-config` — Shared Playwright configurations and web server presets (`@repo/playwright-config`).
+  - `packages/infra-schema` — Infrastructure manifest schema and validation tests (`@repo/infra-schema`).
 - `infra/*` — Terraform infrastructure declarations, environments (`dev`, `production`), and policies.
 - `.github/*` — CI/CD workflows, reusable deployment pipelines, and repository automation.
 

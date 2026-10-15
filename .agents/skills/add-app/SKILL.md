@@ -49,6 +49,7 @@ Every application added to `apps/<app>` must adhere to these contracts:
 4. **Candidate Smoke Test Contract**:
    - `apps/<app>/tests/smoke.mjs` verifying candidate revisions using `node --test` in the CI runner before traffic promotion.
    - Receives `SMOKE_URL` and `SHA` environment variables; polls `/api/health` with retry/backoff (up to 60s) until ready, then asserts entrypoint responsiveness.
+   - Automatically attaches `Authorization: Bearer <SMOKE_TOKEN>` if `SMOKE_TOKEN` is present, enabling seamless zero-traffic smoke verification for private Cloud Run services (`public: false`).
 5. **Infrastructure Contract (Terraform Zero-Touch Discovery)**:
    - Declared via `apps/<app>/infra.json` (specifying `displayName`, `public`, `cpu`, `memory`, `minInstances`, `maxInstances`).
    - Auto-discovered by `infra/main.tf` via `fileset()` and provisioned through `modules/cloud-run-app`.
@@ -182,6 +183,8 @@ import test from "node:test";
 
 const smokeUrl = process.env.SMOKE_URL;
 const expectedSha = process.env.SHA;
+const authToken = process.env.SMOKE_TOKEN || process.env.SMOKE_AUTH_TOKEN;
+const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
 
 if (!smokeUrl) {
   console.error("SMOKE_URL environment variable is required");
@@ -199,11 +202,14 @@ test("candidate revision smoke verification", async () => {
 
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(healthUrl, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(healthUrl, {
+        headers,
+        signal: AbortSignal.timeout(5000),
+      });
       if (res.ok) {
         const body = await res.json();
         if (body.status === "ok" && body.ready === true) {
-          if (!expectedSha || body.commit === expectedSha) {
+          if (!expectedSha || (body.commit ?? body.sha) === expectedSha) {
             healthy = true;
             break;
           }
@@ -222,6 +228,7 @@ test("candidate revision smoke verification", async () => {
 
   // 2. Verify root entrypoint
   const entryRes = await fetch(`${base}/`, {
+    headers,
     signal: AbortSignal.timeout(5000),
   });
   assert.ok(entryRes.ok, `Entrypoint returned HTTP ${entryRes.status}`);

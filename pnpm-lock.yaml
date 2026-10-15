@@ -203,6 +203,9 @@ catalogs:
     vitest:
       specifier: ^5.0.3
       version: 5.0.3
+    zod:
+      specifier: 4.6.5
+      version: 4.6.5
 
 importers:
 
@@ -236,6 +239,9 @@ importers:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
+      '@repo/playwright-config':
+        specifier: workspace:*
+        version: link:../../packages/playwright-config
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config
@@ -282,6 +288,9 @@ importers:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
+      '@repo/playwright-config':
+        specifier: workspace:*
+        version: link:../../packages/playwright-config
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config
@@ -318,6 +327,31 @@ importers:
       eslint-config-next:
         specifier: 'catalog:'
         version: 16.3.8(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
+
+  packages/infra-schema:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+    devDependencies:
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.4
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.3(@types/node@26.6.4)(vite@8.3.1(@types/node@26.6.4)(jiti@2.7.0))
+
+  packages/playwright-config:
+    dependencies:
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.64.0
 
   packages/typescript-config: {}
 

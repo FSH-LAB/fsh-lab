@@ -166,7 +166,11 @@ jobs:
         env:
           SMOKE_URL: ${{ steps.candidate.outputs.url }}
           SHA: ${{ steps.release.outputs.sha }}
-        run: node --test "apps/$APP/tests/smoke.mjs"
+        run: |
+          if token="$(gcloud auth print-identity-token --audiences="${{ steps.candidate.outputs.url }}" 2>/dev/null)"; then
+            export SMOKE_TOKEN="$token"
+          fi
+          node --test "apps/$APP/tests/smoke.mjs"
 
       - name: Promote candidate
         id: promote
