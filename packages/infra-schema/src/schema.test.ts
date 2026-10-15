@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  APP_SLUG_REGEX,
-  validateInfraManifest,
-} from "./schema.js";
+import { APP_SLUG_REGEX, validateInfraManifest } from "./schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appsDir = path.resolve(__dirname, "../../../apps");
