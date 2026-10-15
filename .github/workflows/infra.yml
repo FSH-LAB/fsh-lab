@@ -82,7 +82,7 @@ jobs:
         run: |
           terraform -chdir=infra init -input=false -lockfile=readonly \
             -backend-config="bucket=$PROJECT_ID-terraform-state" \
-            -backend-config="prefix=fsh-lab/dev"
+            -backend-config="prefix=helgefolelse/dev"
           terraform -chdir=infra apply -input=false -auto-approve -lock-timeout=5m \
             -var-file="environments/dev.tfvars"
 
@@ -122,6 +122,6 @@ jobs:
         run: |
           terraform -chdir=infra init -input=false -lockfile=readonly \
             -backend-config="bucket=$PROJECT_ID-terraform-state" \
-            -backend-config="prefix=fsh-lab/production"
+            -backend-config="prefix=helgefolelse/production"
           terraform -chdir=infra apply -input=false -auto-approve -lock-timeout=5m \
             -var-file="environments/production.tfvars"

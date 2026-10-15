@@ -164,6 +164,18 @@ resource "google_project_iam_member" "infra_applier_iam_admin" {
   }
 }
 
+resource "google_project_iam_member" "infra_applier_service_account_admin" {
+  project = google_project.environment.project_id
+  role    = "roles/iam.serviceAccountAdmin"
+  member  = "serviceAccount:${google_service_account.infra_applier.email}"
+
+  condition {
+    title       = "runtime-service-accounts-only"
+    description = "Allows managing IAM policies only for application runtime service accounts (*-runtime)"
+    expression  = "resource.type == 'iam.googleapis.com/ServiceAccount' && resource.name.endsWith('-runtime@${google_project.environment.project_id}.iam.gserviceaccount.com')"
+  }
+}
+
 resource "google_storage_bucket_iam_member" "infra_applier_state" {
   bucket = google_storage_bucket.state.name
   role   = "roles/storage.objectAdmin"
@@ -194,10 +206,11 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   # GCP caps provider display names at 32 characters.
   display_name = "FSH-LAB ${var.environment == "production" ? "prod" : var.environment} deployments"
   attribute_mapping = {
-    "google.subject"        = "assertion.sub"
-    "attribute.repository"  = "assertion.repository"
-    "attribute.ref"         = "assertion.ref"
-    "attribute.environment" = "assertion.environment"
+    "google.subject"             = "assertion.sub"
+    "attribute.repository"       = "assertion.repository"
+    "attribute.ref"              = "assertion.ref"
+    "attribute.environment"      = "assertion.environment"
+    "attribute.job_workflow_ref" = "assertion.job_workflow_ref"
   }
   attribute_condition = "assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/main' && assertion.environment == '${var.environment}'"
 
@@ -215,7 +228,7 @@ resource "google_service_account_iam_member" "github_deployer" {
 resource "google_service_account_iam_member" "github_infra_applier" {
   service_account_id = google_service_account.infra_applier.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.environment/${var.environment}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.job_workflow_ref/${var.github_repository}/.github/workflows/infra.yml@refs/heads/main"
 }
 
 # ---------------------------------------------------------------------------
@@ -232,8 +245,16 @@ module "cloud_run_apps" {
   memory        = try(each.value.memory, "512Mi")
   min_instances = try(each.value.minInstances, 0)
   max_instances = try(each.value.maxInstances, 3)
-  env_vars      = try(each.value.env, {})
-  is_public     = try(each.value.public, true)
+  env_vars = merge(
+    try(each.value.env, {}),
+    each.key == "status" ? {
+      GCP_PROJECT_ID          = google_project.environment.project_id
+      BIGQUERY_DATASET        = "uptime_monitoring"
+      HELGEFOLELSE_HEALTH_URL = var.environment == "production" ? "https://helgefolelse.no/api/health" : "https://helgefolelse-web-${google_project.environment.number}.${local.region}.run.app/api/health"
+      HELGEFOLELSE_URL        = var.environment == "production" ? "https://helgefolelse.no" : "https://helgefolelse-web-${google_project.environment.number}.${local.region}.run.app"
+    } : {}
+  )
+  is_public = try(each.value.public, true)
 
   project_id     = google_project.environment.project_id
   region         = local.region

@@ -1,10 +1,11 @@
-mock_provider "google" {
-  mock_resource "google_iam_workload_identity_pool" {
-    defaults = {
-      name = "projects/123456789/locations/global/workloadIdentityPools/github-actions"
-    }
+override_resource {
+  target          = google_iam_workload_identity_pool.github
+  override_during = plan
+  values = {
+    name = "projects/123456789/locations/global/workloadIdentityPools/github-actions"
   }
 }
+
 
 variables {
   environment  = "dev"
@@ -26,7 +27,7 @@ run "protects_core_resources" {
   }
 
   assert {
-    condition     = google_storage_bucket.state.location == local.region
+    condition     = lower(google_storage_bucket.state.location) == lower(local.region)
     error_message = "The state bucket must use the configured region."
   }
 }
@@ -138,7 +139,21 @@ run "uptime_monitoring_provisions_checks_and_dataset" {
   command = plan
 
   assert {
-    condition     = module.uptime_monitoring.dataset_id == "uptime_monitoring"
-    error_message = "Uptime monitoring must provision the BigQuery dataset."
+    condition     = module.uptime_monitoring.dataset_id == "uptime_monitoring" && module.uptime_monitoring.table_id == "uptime_checks"
+    error_message = "Uptime monitoring must provision the BigQuery dataset and uptime_checks table."
+  }
+}
+
+run "infra_identity_is_strictly_scoped" {
+  command = plan
+
+  assert {
+    condition     = google_service_account_iam_member.github_infra_applier.member == "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.job_workflow_ref/FSH-LAB/fsh-lab/.github/workflows/infra.yml@refs/heads/main"
+    error_message = "Infra identity trust must be restricted to verified infra.yml workflow claims."
+  }
+
+  assert {
+    condition     = google_project_iam_member.infra_applier_service_account_admin.role == "roles/iam.serviceAccountAdmin" && can(regex("-runtime@", google_project_iam_member.infra_applier_service_account_admin.condition[0].expression))
+    error_message = "Infra service account admin role must be strictly scoped to application runtime service accounts."
   }
 }

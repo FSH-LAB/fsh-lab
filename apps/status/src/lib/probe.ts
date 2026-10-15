@@ -17,6 +17,91 @@ const probeTelemetryStore: Record<
 > = {};
 const MAX_TELEMETRY_POINTS = 24;
 
+// Rolling daily check history store: tracks checks per day to calculate truthful daily uptime
+const dailyChecksStore: Record<
+  string,
+  Record<
+    string,
+    {
+      totalChecks: number;
+      successfulChecks: number;
+      outages: number;
+      degraded: number;
+    }
+  >
+> = {};
+
+function recordDailyCheck(serviceId: string, result: ProbeResult): void {
+  const dateStr = result.timestamp.split("T")[0]!;
+  if (!dailyChecksStore[serviceId]) {
+    dailyChecksStore[serviceId] = {};
+  }
+  if (!dailyChecksStore[serviceId]![dateStr]) {
+    dailyChecksStore[serviceId]![dateStr] = {
+      totalChecks: 0,
+      successfulChecks: 0,
+      outages: 0,
+      degraded: 0,
+    };
+  }
+  const entry = dailyChecksStore[serviceId]![dateStr]!;
+  entry.totalChecks += 1;
+  if (result.status === "operational") {
+    entry.successfulChecks += 1;
+  } else if (
+    result.status === "major_outage" ||
+    result.status === "partial_outage"
+  ) {
+    entry.outages += 1;
+  } else if (result.status === "degraded_performance") {
+    entry.degraded += 1;
+  }
+}
+
+function emitUptimeCheckLog(
+  service: (typeof MONITORED_SERVICES_CONFIG)[number],
+  result: ProbeResult,
+): void {
+  try {
+    let host = service.id;
+    if (service.healthEndpoint) {
+      host = new URL(service.healthEndpoint).hostname;
+    } else if (service.appUrl) {
+      host = new URL(service.appUrl).hostname;
+    }
+    const isSuccess = result.status === "operational";
+    // Producer for Cloud Logging sink -> BigQuery uptime_checks table
+    console.log(
+      JSON.stringify({
+        event: "uptime_check",
+        service_id: service.id,
+        host,
+        status: result.statusCode ?? (isSuccess ? 200 : 503),
+        latency_ms: result.latencyMs,
+        success: isSuccess,
+        timestamp: result.timestamp,
+      }),
+    );
+  } catch {
+    // Avoid unhandled errors on malformed URLs
+  }
+}
+
+export function getDailyChecksStore(): Record<
+  string,
+  Record<
+    string,
+    {
+      totalChecks: number;
+      successfulChecks: number;
+      outages: number;
+      degraded: number;
+    }
+  >
+> {
+  return dailyChecksStore;
+}
+
 /**
  * Resets probe cache and telemetry buffer (primarily for unit testing).
  */
@@ -25,6 +110,9 @@ export function resetProbeCacheForTesting(): void {
   activeProbePromise = null;
   for (const key of Object.keys(probeTelemetryStore)) {
     delete probeTelemetryStore[key];
+  }
+  for (const key of Object.keys(dailyChecksStore)) {
+    delete dailyChecksStore[key];
   }
 }
 
@@ -119,16 +207,22 @@ export async function getProbeSnapshot(options?: {
         const timestampIso = nowDate.toISOString();
         const timeLabel = `${String(nowDate.getUTCHours()).padStart(2, "0")}:${String(nowDate.getUTCMinutes()).padStart(2, "0")}`;
 
+        const setResult = (res: ProbeResult) => {
+          results[service.id] = res;
+          recordDailyCheck(service.id, res);
+          emitUptimeCheckLog(service, res);
+        };
+
         // 1. Platform / Infrastructure services without dedicated HTTP health check
         if (!service.healthEndpoint) {
-          results[service.id] = {
+          setResult({
             id: service.id,
             name: service.name,
             status: service.defaultStatus ?? "operational",
             latencyMs: 0, // Explicit 0: not measured via HTTP ping
             probeType: "platform_managed",
             timestamp: timestampIso,
-          };
+          });
           return;
         }
 
@@ -186,7 +280,7 @@ export async function getProbeSnapshot(options?: {
             }
 
             if (!isServiceReady) {
-              results[service.id] = {
+              setResult({
                 id: service.id,
                 name: service.name,
                 status: "major_outage",
@@ -195,7 +289,7 @@ export async function getProbeSnapshot(options?: {
                 statusCode: response.status,
                 error: errorDetail,
                 timestamp: timestampIso,
-              };
+              });
               return;
             }
 
@@ -203,7 +297,7 @@ export async function getProbeSnapshot(options?: {
               reportedStatus ??
               (latencyMs > 800 ? "degraded_performance" : "operational");
 
-            results[service.id] = {
+            setResult({
               id: service.id,
               name: service.name,
               status: finalStatus,
@@ -211,7 +305,7 @@ export async function getProbeSnapshot(options?: {
               probeType: service.probeType ?? "http_probe",
               statusCode: response.status,
               timestamp: timestampIso,
-            };
+            });
 
             // Store real telemetry point only for active responses
             if (!probeTelemetryStore[service.id]) {
@@ -231,7 +325,7 @@ export async function getProbeSnapshot(options?: {
             const status: ServiceStatus =
               response.status >= 500 ? "major_outage" : "degraded_performance";
 
-            results[service.id] = {
+            setResult({
               id: service.id,
               name: service.name,
               status,
@@ -239,7 +333,7 @@ export async function getProbeSnapshot(options?: {
               probeType: service.probeType ?? "http_probe",
               statusCode: response.status,
               timestamp: timestampIso,
-            };
+            });
           }
         } catch (err) {
           // Network failure, DNS error, connection refusal, or timeout.
@@ -247,7 +341,7 @@ export async function getProbeSnapshot(options?: {
             err instanceof Error ? err.message : "Connection failed";
 
           // Unresponsive endpoints (timeouts, connection refusals) are classified as major_outage
-          results[service.id] = {
+          setResult({
             id: service.id,
             name: service.name,
             status: "major_outage",
@@ -255,7 +349,7 @@ export async function getProbeSnapshot(options?: {
             probeType: service.probeType ?? "http_probe",
             error: errorMsg,
             timestamp: timestampIso,
-          };
+          });
         }
       }),
     );

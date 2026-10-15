@@ -8,7 +8,7 @@ export async function GET(
   props: { params: Promise<{ id: string }> },
 ) {
   const { id } = await props.params;
-  const probeResults = await getProbeSnapshot({ targetId: id });
+  const probeResults = await getProbeSnapshot();
   const probe = probeResults[id];
 
   const services = getAllMonitoredServices(

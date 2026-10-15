@@ -27,14 +27,30 @@ export function buildUptimeQuery(
     SELECT
       FORMAT_DATE('%Y-%m-%d', DATE(timestamp)) as date,
       COUNT(1) as total_checks,
-      COUNTIF(httpRequest.status >= 200 AND httpRequest.status < 300) as successful_checks,
-      ROUND(COUNTIF(httpRequest.status >= 200 AND httpRequest.status < 300) * 100.0 / NULLIF(COUNT(1), 0), 2) as uptime_percentage,
-      ROUND(AVG(CAST(jsonPayload.latency_ms AS FLOAT64)), 1) as avg_latency_ms
-    FROM \`${projectId}.${datasetId}.monitoring_googleapis_com_uptime_check_*\`
+      COUNTIF(
+        COALESCE(
+          jsonPayload.success,
+          httpRequest.status >= 200 AND httpRequest.status < 300,
+          status >= 200 AND status < 300
+        )
+      ) as successful_checks,
+      ROUND(
+        COUNTIF(
+          COALESCE(
+            jsonPayload.success,
+            httpRequest.status >= 200 AND httpRequest.status < 300,
+            status >= 200 AND status < 300
+          )
+        ) * 100.0 / NULLIF(COUNT(1), 0),
+        2
+      ) as uptime_percentage,
+      ROUND(AVG(COALESCE(CAST(jsonPayload.latency_ms AS FLOAT64), CAST(latency_ms AS FLOAT64))), 1) as avg_latency_ms
+    FROM \`${projectId}.${datasetId}.uptime_checks*\`
     WHERE timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL ${safeDays} DAY)
       AND (
         resource.labels.host = '${serviceHost}'
         OR jsonPayload.host = '${serviceHost}'
+        OR host = '${serviceHost}'
       )
     GROUP BY date
     ORDER BY date ASC
@@ -130,7 +146,42 @@ export async function fetchBigQueryUptimeHistory(
       return null;
     }
 
-    const json = await response.json();
+    let json = await response.json();
+
+    // If query execution is incomplete, poll jobReference with bounded deadline
+    if (json.jobComplete === false) {
+      const jobId = json.jobReference?.jobId;
+      const location = json.jobReference?.location;
+      if (!jobId) {
+        return null;
+      }
+
+      const deadline = Date.now() + 5000;
+      while (json.jobComplete === false && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const pollUrl = new URL(
+          `https://bigquery.googleapis.com/bigquery/v2/projects/${projectId}/queries/${jobId}`,
+        );
+        if (location) {
+          pollUrl.searchParams.set("location", location);
+        }
+        const pollRes = await fetch(pollUrl.toString(), {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: AbortSignal.timeout(3000),
+        });
+        if (!pollRes.ok) {
+          return null;
+        }
+        json = await pollRes.json();
+      }
+
+      if (json.jobComplete === false) {
+        return null;
+      }
+    }
+
     if (!json.rows || !Array.isArray(json.rows)) {
       return [];
     }

@@ -1,4 +1,4 @@
-import { getServiceTelemetry } from "./probe";
+import { getDailyChecksStore, getServiceTelemetry } from "./probe";
 import { generate90DayHistory } from "./status";
 import type {
   ProbeType,
@@ -146,20 +146,31 @@ export function buildMonitoredService(
   const currentLatency =
     overrides?.currentLatencyMs ?? config.baseLatencyMs ?? 0;
 
+  const storedDailyChecks = getDailyChecksStore()[config.id];
+
   const days = generate90DayHistory(
     config.id,
     config.targetUptime,
     config.incidentOverrides,
     now,
     currentStatus,
+    undefined,
+    storedDailyChecks,
   );
 
   // Retrieve real observed telemetry points
   const realTelemetry = getServiceTelemetry(config.id);
 
-  // Compute 90d uptime
-  const uptimeSum = days.reduce((sum, d) => sum + d.uptimePercentage, 0);
-  const uptime90d = Number((uptimeSum / (days.length || 1)).toFixed(3));
+  // Compute 90d uptime over measured days only
+  const measuredDays = days.filter((d) => d.uptimePercentage !== null);
+  const uptimeSum = measuredDays.reduce(
+    (sum, d) => sum + (d.uptimePercentage ?? 0),
+    0,
+  );
+  const uptime90d =
+    measuredDays.length > 0
+      ? Number((uptimeSum / measuredDays.length).toFixed(3))
+      : 100.0;
 
   return {
     id: config.id,

@@ -3,14 +3,16 @@ export type ServiceStatus =
   | "degraded_performance"
   | "partial_outage"
   | "major_outage"
-  | "maintenance";
+  | "maintenance"
+  | "unknown";
 
 export type SystemStatusLevel =
   | "operational"
   | "degraded_performance"
   | "partial_outage"
   | "major_outage"
-  | "maintenance";
+  | "maintenance"
+  | "unknown";
 
 export type ServiceCategory =
   "internal" | "third_party" | "apps" | "platform" | "infra";
@@ -18,7 +20,7 @@ export type ServiceCategory =
 export interface DayUptime {
   date: string; // ISO date YYYY-MM-DD
   status: ServiceStatus;
-  uptimePercentage: number;
+  uptimePercentage: number | null;
   incidentCount: number;
   description?: string;
 }

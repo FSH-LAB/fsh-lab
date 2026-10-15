@@ -6,12 +6,41 @@ All environments use `europe-north2`. The region is fixed in Terraform to match 
 
 | Root            | Manages                                                                                       | State                                                               |
 | --------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `infra/`        | GCP project, APIs, state bucket, Artifact Registry, Cloud Run, service accounts, IAM and OIDC | `gs://<project>-terraform-state/fsh-lab/<env>`                      |
+| `infra/`        | GCP project, APIs, state bucket, Artifact Registry, Cloud Run, service accounts, IAM and OIDC | `gs://<project>-terraform-state/helgefolelse/<env>`                 |
 | `infra/github/` | GitHub environments, reviewers, branch policy and deployment variables                        | `gs://generated-mote-510411-v8-terraform-state/helgefolelse/github` |
 
 Terraform owns infrastructure; the deploy workflow owns the image, `GIT_SHA`, revisions and traffic. Those release fields are ignored by Terraform. Deletion protection is enabled on core resources.
 
-The deployer can write state and lock objects under `fsh-lab/<env>/` (and legacy `helgefolelse/<env>/`). It cannot write the operator-owned `helgefolelse/github/` prefix or change bucket IAM/settings.
+The state prefix currently remains `helgefolelse/<env>` to protect existing state from recreation. Both `helgefolelse/<env>/` and `fsh-lab/<env>/` are permitted by bucket IAM conditions to enable zero-downtime operator migration.
+
+## Infrastructure Identity Bootstrap (`fsh-lab-infra`)
+
+The CI workflow `infra.yml` uses the dedicated `fsh-lab-infra` service account (`GCP_INFRA_SERVICE_ACCOUNT`). Because standard CI identities cannot escalate project privileges or grant IAM roles, bootstrapping this identity requires an initial operator apply:
+
+1. Apply `infra/` with operator credentials for each environment:
+   ```sh
+   terraform -chdir=infra init -backend-config="bucket=$PROJECT_ID-terraform-state" -backend-config="prefix=helgefolelse/$ENV"
+   terraform -chdir=infra apply -var-file="environments/$ENV.tfvars"
+   ```
+2. Apply `infra/github/` with operator credentials to write `GCP_INFRA_SERVICE_ACCOUNT`:
+   ```sh
+   terraform -chdir=infra/github init
+   terraform -chdir=infra/github apply
+   ```
+
+## State Migration Runbook (Migrating to `fsh-lab/<env>`)
+
+To migrate existing environment state from `helgefolelse/<env>` to `fsh-lab/<env>`:
+
+1. Verify that no deployments or infrastructure runs are in progress.
+2. Initialize and migrate state locally with operator credentials:
+   ```sh
+   terraform -chdir=infra init -migrate-state \
+     -backend-config="bucket=$PROJECT_ID-terraform-state" \
+     -backend-config="prefix=fsh-lab/$ENV"
+   ```
+3. Run `terraform -chdir=infra plan -var-file="environments/$ENV.tfvars"` and verify **0 to add, 0 to change, 0 to destroy**.
+4. Once verified for both `dev` and `production`, update the `-backend-config="prefix=fsh-lab/<env>"` in `.github/workflows/infra.yml`.
 
 ## Application Manifest Discovery (`infra/modules/cloud-run-app`)
 

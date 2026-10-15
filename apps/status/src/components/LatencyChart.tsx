@@ -136,25 +136,57 @@ export function LatencyChart({
             strokeLinejoin="round"
           />
 
-          {/* Hoverable dots */}
+          {/* Hoverable and focusable sample points */}
           {svgPoints.map(({ x, y, point }, i) => (
             <g
               key={i}
-              className="cursor-pointer group"
+              tabIndex={0}
+              role="button"
+              aria-label={`Sample ${i + 1} of ${svgPoints.length}: ${point.timestamp} UTC, ${point.latencyMs}ms`}
+              className="cursor-pointer group outline-none focus:outline-none"
               onMouseEnter={() => setHoveredPoint(point)}
               onMouseLeave={() => setHoveredPoint(null)}
+              onFocus={() => setHoveredPoint(point)}
+              onBlur={() => setHoveredPoint(null)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setHoveredPoint(point);
+                }
+              }}
             >
               <circle
                 cx={x}
                 cy={y}
                 r="3"
-                className="fill-emerald-400 opacity-60 group-hover:opacity-100 group-hover:r-4 transition-all"
+                className="fill-emerald-400 opacity-60 group-hover:opacity-100 group-focus:opacity-100 group-hover:r-4 group-focus:r-4 transition-all"
               />
               <circle cx={x} cy={y} r="10" className="fill-transparent" />
             </g>
           ))}
         </svg>
       </div>
+
+      {/* Accessible data table for screen readers */}
+      <table className="sr-only">
+        <caption>Response Latency Telemetry Samples</caption>
+        <thead>
+          <tr>
+            <th scope="col">Sample</th>
+            <th scope="col">Timestamp (UTC)</th>
+            <th scope="col">Latency (ms)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {points.map((p, idx) => (
+            <tr key={idx}>
+              <td>{idx + 1}</td>
+              <td>{p.timestamp}</td>
+              <td>{p.latencyMs}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
       <div className="flex justify-between text-[11px] text-slate-500 font-mono">
         <span>{firstTimestamp ? `${firstTimestamp} (Start)` : ""}</span>

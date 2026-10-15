@@ -74,6 +74,7 @@ jobs:
       matrix:
         app: ${{ fromJson(needs.detect-apps.outputs.apps) }}
     permissions:
+      actions: read # Query infrastructure workflow run status.
       contents: write # Create release tags and check out code.
       packages: write # Publish container images to GHCR.
       attestations: write # Publish and verify build provenance.

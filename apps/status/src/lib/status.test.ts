@@ -166,16 +166,84 @@ describe("status logic", () => {
     expect(summary.activeMaintenanceCount).toBe(1);
   });
 
-  it("produces authentic 100% uptime for clean days without synthetic fluctuations", () => {
+  it("represents unmeasured past days as unknown and measures today truthfully", () => {
     const fixedDate = new Date("2026-10-14T10:00:00.000Z");
     const history = generate90DayHistory("test-service", 100, {}, fixedDate);
 
-    // Verify all 90 days are 100.0% with 0 incidents
-    for (const day of history) {
-      expect(day.status).toBe("operational");
-      expect(day.uptimePercentage).toBe(100);
-      expect(day.incidentCount).toBe(0);
+    // Past 89 days without observations are represented as unknown
+    for (let i = 0; i < 89; i++) {
+      expect(history[i]?.status).toBe("unknown");
+      expect(history[i]?.uptimePercentage).toBeNull();
+      expect(history[i]?.incidentCount).toBe(0);
     }
+
+    // Today is measured from live observation / checks
+    const today = history[89];
+    expect(today?.date).toBe("2026-10-14");
+    expect(today?.status).toBe("operational");
+    expect(today?.uptimePercentage).toBe(100);
+  });
+
+  it("calculates daily availability from stored check results and retains outages after recovery", () => {
+    const fixedDate = new Date("2026-10-14T10:00:00.000Z");
+    const storedChecks = {
+      "2026-10-14": {
+        totalChecks: 10,
+        successfulChecks: 9,
+        outages: 1,
+        degraded: 0,
+      },
+    };
+
+    // Even if currentStatus has recovered to "operational", today retains the outage
+    const history = generate90DayHistory(
+      "test-service",
+      100,
+      {},
+      fixedDate,
+      "operational",
+      null,
+      storedChecks,
+    );
+
+    const today = history[89];
+    expect(today?.status).toBe("partial_outage");
+    expect(today?.uptimePercentage).toBe(90);
+    expect(today?.incidentCount).toBe(1);
+  });
+
+  it("displays degraded performance headline when an active minor incident exists with operational services", () => {
+    const mockServices: ServiceComponent[] = [
+      {
+        id: "app1",
+        name: "App 1",
+        category: "apps",
+        description: "Test app",
+        status: "operational",
+        uptime90d: 100,
+        currentLatencyMs: 20,
+        days: [],
+        metrics24h: { avgLatencyMs: 20, p95LatencyMs: 25, points: [] },
+      },
+    ];
+
+    const activeIncidents: Incident[] = [
+      {
+        id: "inc-minor",
+        title: "Latency degradation on partner API",
+        impact: "minor",
+        status: "investigating",
+        affectedServiceIds: ["app1"],
+        createdAt: "2026-10-14T10:00:00.000Z",
+        updatedAt: "2026-10-14T10:00:00.000Z",
+        updates: [],
+      },
+    ];
+
+    const summary = calculateSystemStatus(mockServices, activeIncidents);
+    expect(summary.level).toBe("degraded_performance");
+    expect(summary.headline).toBe("Degraded Performance Reported");
+    expect(summary.activeIncidentsCount).toBe(1);
   });
 
   it("calculates latency metrics from real telemetry points correctly", () => {

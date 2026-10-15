@@ -1,4 +1,8 @@
-import { getProbeSnapshot, isAuthorizedToForce } from "@/lib/probe";
+import {
+  getProbeSnapshot,
+  getServiceTelemetry,
+  isAuthorizedToForce,
+} from "@/lib/probe";
 import { optionsResponse, restJsonResponse } from "@/lib/rest";
 
 export async function GET(request: Request) {
@@ -14,10 +18,16 @@ export async function GET(request: Request) {
       : {}
     : snapshot;
 
+  const telemetry: Record<string, ReturnType<typeof getServiceTelemetry>> = {};
+  for (const id of Object.keys(results)) {
+    telemetry[id] = getServiceTelemetry(id);
+  }
+
   return restJsonResponse(
     {
       data: {
         results,
+        telemetry,
       },
       meta: {
         timestamp: new Date().toISOString(),

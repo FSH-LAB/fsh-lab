@@ -14,9 +14,7 @@ describe("Architecture B BigQuery client", () => {
       180,
     );
 
-    expect(query).toContain(
-      "`test-project.uptime_monitoring.monitoring_googleapis_com_uptime_check_*`",
-    );
+    expect(query).toContain("`test-project.uptime_monitoring.uptime_checks*`");
     expect(query).toContain("INTERVAL 180 DAY");
     expect(query).toContain("helgefolelse.no");
     expect(query).toContain("GROUP BY date");

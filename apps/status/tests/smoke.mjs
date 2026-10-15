@@ -47,11 +47,11 @@ test(
   { timeout: 90_000 },
   async () => {
     const data = JSON.parse(await request("/api/v1/status"));
-    assert.ok(data.data);
+    assert.ok(data.status, "response must contain status object");
     assert.match(
-      data.data.indicator,
+      data.status.indicator,
       /^(none|minor|major|critical|maintenance)$/,
     );
-    assert.ok(data.data.totalServicesCount >= 1);
+    assert.ok(Array.isArray(data.services) && data.services.length >= 1);
   },
 );

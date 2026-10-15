@@ -57,17 +57,59 @@ export function StatusDashboard({
         string,
         ProbeResult
       >;
+      const telemetry = (data.data?.telemetry ?? data.telemetry) as
+        | Record<
+            string,
+            {
+              avgLatencyMs: number;
+              p95LatencyMs: number;
+              points: Array<{ timestamp: string; latencyMs: number }>;
+            }
+          >
+        | undefined;
 
       startTransition(() => {
         setServices((prev) => {
           const updated = prev.map((service) => {
             const probe = results[service.id];
             if (!probe) return service;
+
+            let metrics24h = service.metrics24h;
+            if (
+              telemetry?.[service.id] &&
+              telemetry[service.id].points.length > 0
+            ) {
+              metrics24h = telemetry[service.id];
+            } else if (probe.latencyMs > 0) {
+              const nowDate = new Date();
+              const timeLabel = `${String(nowDate.getUTCHours()).padStart(2, "0")}:${String(nowDate.getUTCMinutes()).padStart(2, "0")}`;
+              const prevPoints = service.metrics24h?.points ?? [];
+              const newPoints = [
+                ...prevPoints,
+                { timestamp: timeLabel, latencyMs: probe.latencyMs },
+              ].slice(-24);
+              const values = newPoints
+                .map((p) => p.latencyMs)
+                .sort((a, b) => a - b);
+              const sum = values.reduce((acc, v) => acc + v, 0);
+              const avgLatencyMs = Math.round(sum / values.length);
+              const p95Idx = Math.min(
+                values.length - 1,
+                Math.floor(values.length * 0.95),
+              );
+              metrics24h = {
+                avgLatencyMs,
+                p95LatencyMs: values[p95Idx] ?? avgLatencyMs,
+                points: newPoints,
+              };
+            }
+
             return {
               ...service,
               status: (probe.status as ServiceStatus) || service.status,
               probeType: (probe.probeType as ProbeType) || service.probeType,
               currentLatencyMs: probe.latencyMs,
+              metrics24h,
             };
           });
           setSummary(

@@ -1,3 +1,4 @@
+import type { DailyUptimeStats } from "./bigquery";
 import type {
   DayUptime,
   Incident,
@@ -11,8 +12,8 @@ import type {
 
 /**
  * Generates 90 days of uptime history up to today.
- * Every day without an incident is truthfully 100% operational.
- * Recorded incidents accurately map to their respective days.
+ * Daily availability is calculated from stored check results and persisted telemetry.
+ * Unmeasured past days without observations are truthfully represented as unknown.
  */
 export function generate90DayHistory(
   seed: string,
@@ -23,6 +24,16 @@ export function generate90DayHistory(
   > = {},
   now: Date = new Date(),
   currentStatus: ServiceStatus = "operational",
+  persistedHistory?: DailyUptimeStats[] | null,
+  storedDailyChecks?: Record<
+    string,
+    {
+      totalChecks: number;
+      successfulChecks: number;
+      outages: number;
+      degraded: number;
+    }
+  > | null,
 ): DayUptime[] {
   void seed;
   void targetUptime;
@@ -33,21 +44,6 @@ export function generate90DayHistory(
     d.setUTCDate(d.getUTCDate() - i);
     const dateStr = d.toISOString().split("T")[0]!;
 
-    // For today (index 89, i === 0), derive state from current live observation
-    if (i === 0 && currentStatus !== "operational") {
-      days.push({
-        date: dateStr,
-        status: currentStatus,
-        uptimePercentage: currentStatus === "major_outage" ? 0 : 85.0,
-        incidentCount: 1,
-        description:
-          currentStatus === "major_outage"
-            ? "Service outage observed during live health probing."
-            : "Degraded performance observed during live health probing.",
-      });
-      continue;
-    }
-
     if (incidentDays[dateStr]) {
       const override = incidentDays[dateStr]!;
       days.push({
@@ -57,15 +53,115 @@ export function generate90DayHistory(
         incidentCount: override.count,
         description: override.desc,
       });
-    } else {
-      // Truthful 100% operational day with zero recorded incidents
+      continue;
+    }
+
+    // For today (i === 0), calculate availability from today's stored checks or live observation
+    if (i === 0) {
+      const todayChecks = storedDailyChecks?.[dateStr];
+      if (todayChecks && todayChecks.totalChecks > 0) {
+        const uptimePercentage = Number(
+          (
+            (todayChecks.successfulChecks / todayChecks.totalChecks) *
+            100
+          ).toFixed(2),
+        );
+        let status: ServiceStatus = currentStatus;
+        if (currentStatus === "operational" && todayChecks.outages > 0) {
+          status = "partial_outage";
+        } else if (
+          currentStatus === "operational" &&
+          todayChecks.degraded > 0
+        ) {
+          status = "degraded_performance";
+        }
+        days.push({
+          date: dateStr,
+          status,
+          uptimePercentage,
+          incidentCount: todayChecks.outages > 0 ? 1 : 0,
+          description:
+            todayChecks.outages > 0
+              ? "Service outage observed during today's checks."
+              : undefined,
+        });
+        continue;
+      }
+
+      if (currentStatus !== "operational") {
+        days.push({
+          date: dateStr,
+          status: currentStatus,
+          uptimePercentage: currentStatus === "major_outage" ? 0 : 85.0,
+          incidentCount: 1,
+          description:
+            currentStatus === "major_outage"
+              ? "Service outage observed during live health probing."
+              : "Degraded performance observed during live health probing.",
+        });
+        continue;
+      }
+
       days.push({
         date: dateStr,
         status: "operational",
         uptimePercentage: 100.0,
         incidentCount: 0,
       });
+      continue;
     }
+
+    // For past days (i > 0): check persisted history from BigQuery
+    const persisted = persistedHistory?.find((p) => p.date === dateStr);
+    if (persisted && persisted.totalChecks > 0) {
+      const status: ServiceStatus =
+        persisted.uptimePercentage >= 99.5
+          ? "operational"
+          : persisted.uptimePercentage >= 90
+            ? "degraded_performance"
+            : "partial_outage";
+      days.push({
+        date: dateStr,
+        status,
+        uptimePercentage: persisted.uptimePercentage,
+        incidentCount: persisted.uptimePercentage < 99.5 ? 1 : 0,
+        description: `Persisted checks: ${persisted.successfulChecks}/${persisted.totalChecks}`,
+      });
+      continue;
+    }
+
+    // Check stored in-memory checks for past day
+    const pastChecks = storedDailyChecks?.[dateStr];
+    if (pastChecks && pastChecks.totalChecks > 0) {
+      const uptimePercentage = Number(
+        ((pastChecks.successfulChecks / pastChecks.totalChecks) * 100).toFixed(
+          2,
+        ),
+      );
+      const status: ServiceStatus =
+        pastChecks.outages > 0
+          ? "partial_outage"
+          : pastChecks.degraded > 0
+            ? "degraded_performance"
+            : "operational";
+      days.push({
+        date: dateStr,
+        status,
+        uptimePercentage,
+        incidentCount: pastChecks.outages > 0 ? 1 : 0,
+      });
+      continue;
+    }
+
+    // Unmeasured past day without telemetry observations: represent as unknown
+    days.push({
+      date: dateStr,
+      status: "unknown",
+      uptimePercentage: null,
+      incidentCount: 0,
+      description:
+        "No probe observations or telemetry recorded for this period.",
+    });
   }
 
   return days;
@@ -200,6 +296,9 @@ export function calculateSystemStatus(
     headline = `${degradedCount} of ${services.length} services experiencing degraded performance`;
     subheadline =
       "Services are operational but experiencing elevated response times (>800ms).";
+  } else if (worstStatus === "degraded_performance") {
+    headline = "Degraded Performance Reported";
+    subheadline = "An active incident is affecting service performance.";
   } else if (worstStatus === "maintenance") {
     headline = "Scheduled Maintenance in Progress";
     subheadline = "Planned maintenance is currently underway.";
@@ -266,6 +365,15 @@ export function getStatusBadgeInfo(status: ServiceStatus | SystemStatusLevel): {
         borderColor: "border-sky-500/20",
         barColor: "bg-sky-500",
       };
+    case "unknown":
+      return {
+        label: "Unknown",
+        dotColor: "bg-slate-400",
+        badgeBg: "bg-slate-500/10",
+        badgeText: "text-slate-400",
+        borderColor: "border-slate-500/20",
+        barColor: "bg-slate-600",
+      };
   }
 }
 
@@ -278,6 +386,7 @@ export function mapLevelToStandardIndicator(
 ): "none" | "minor" | "major" | "critical" | "maintenance" {
   switch (level) {
     case "operational":
+    case "unknown":
       return "none";
     case "degraded_performance":
       return "minor";
