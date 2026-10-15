@@ -301,26 +301,26 @@ export default function Tide({ initial }: { initial: Reading }) {
         const val = Math.min(100, Math.max(0, baseValue + d.offset));
         const isSelected = selectedDeptId === d.id;
         return `
-          <div data-dept-id="${d.id}" class="dept-row p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+          <button type="button" data-dept-id="${d.id}" class="dept-row w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
             isSelected ? "bg-teal-500/20 border-teal-300/60" : "bg-white/5 border-white/10 hover:bg-white/10"
           }">
-            <div class="flex items-center gap-2.5">
+            <span class="flex items-center gap-2.5">
               <span class="w-3 h-3 rounded-full shrink-0" style="background:${d.color}"></span>
-              <div>
-                <div class="text-xs font-semibold text-[var(--foam)] flex items-center gap-1.5">
+              <span>
+                <span class="text-xs font-semibold text-[var(--foam)] flex items-center gap-1.5">
                   <span>${d.name}</span>
                   <span class="text-[10px] font-mono-tabular text-[var(--foam)]/50">(${d.members})</span>
-                </div>
-                <div class="text-[10px] text-[var(--foam)]/60">${d.status}</div>
-              </div>
-            </div>
-            <div class="text-right font-mono-tabular">
-              <div class="text-xs font-bold text-[var(--foam)]">${val.toFixed(1)}%</div>
-              <div class="text-[10px] ${d.offset >= 0 ? "text-emerald-300" : "text-amber-300"}">
+                </span>
+                <span class="block text-[10px] text-[var(--foam)]/60">${d.status}</span>
+              </span>
+            </span>
+            <span class="text-right font-mono-tabular">
+              <span class="block text-xs font-bold text-[var(--foam)]">${val.toFixed(1)}%</span>
+              <span class="block text-[10px] ${d.offset >= 0 ? "text-emerald-300" : "text-amber-300"}">
                 ${d.offset >= 0 ? "+" : ""}${d.offset}% vs snitt
-              </div>
-            </div>
-          </div>
+              </span>
+            </span>
+          </button>
         `;
       }).join("");
 
