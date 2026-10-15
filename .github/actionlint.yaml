@@ -1,0 +1,7 @@
+paths:
+  .github/workflows/ci.yml:
+    ignore:
+      # actionlint does not yet recognize the "code-quality" permission scope
+      # required by actions/upload-code-coverage. See
+      # https://github.com/rhysd/actionlint/issues for tracking support.
+      - 'unknown permission scope "code-quality"'
