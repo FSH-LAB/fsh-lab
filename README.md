@@ -6,9 +6,10 @@ A unified monorepo hosting side projects, learning prototypes, and production ap
 
 ### Applications (`apps/`)
 
-| Application                         | Description                                     | Stack                              | Status     |
-| ----------------------------------- | ----------------------------------------------- | ---------------------------------- | ---------- |
-| [`helgefolelse`](apps/helgefolelse) | A weekend feeling tracker in `Europe/Oslo` time | Next.js 16, React 19, Tailwind CSS | Production |
+| Application                         | Description                                                      | Stack                              | Status     |
+| ----------------------------------- | ---------------------------------------------------------------- | ---------------------------------- | ---------- |
+| [`helgefolelse`](apps/helgefolelse) | A weekend feeling tracker in `Europe/Oslo` time                  | Next.js 16, React 19, Tailwind CSS | Production |
+| [`status`](apps/status)             | Real-time system status, uptime monitoring, and incident history | Next.js 16, React 19, Tailwind CSS | Production |
 
 ### Shared Packages (`packages/`)
 

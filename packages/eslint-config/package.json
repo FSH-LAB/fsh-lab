@@ -8,9 +8,9 @@
     "./next": "./next.js"
   },
   "dependencies": {
-    "eslint-config-next": "16.3.8"
+    "eslint-config-next": "catalog:"
   },
   "peerDependencies": {
-    "eslint": "^9.0.0"
+    "eslint": "catalog:"
   }
 }

@@ -6,6 +6,7 @@ Monorepo managed with **pnpm** workspaces and **Turborepo**, hosting independent
 
 - `apps/*` — Standalone applications and services. Each application is independently deployable and isolated:
   - `apps/helgefolelse` — Next.js web application.
+  - `apps/status` — Next.js system status and uptime monitoring dashboard.
 - `packages/*` — Shared internal libraries, tooling, and configurations (`@repo/*` namespace):
   - `packages/typescript-config` — Shared TypeScript configurations (`@repo/typescript-config`).
   - `packages/eslint-config` — Shared ESLint configurations (`@repo/eslint-config`).
