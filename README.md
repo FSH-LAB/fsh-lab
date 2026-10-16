@@ -66,11 +66,11 @@ Adding a new application is powered by zero-touch GitOps discovery:
    Create `apps/<name>` containing `infra.json`, `package.json`, `/api/health`, and `tests/smoke.mjs` (see [`.agents/skills/add-app/SKILL.md`](.agents/skills/add-app/SKILL.md) for the universal boundary contracts and runbook).
 
 2. **Open a Pull Request**:
-   - `ci.yml` lints, typechecks, tests, and builds changed packages via Turborepo, and validates Terraform configurations and infrastructure assertions.
+   - `ci.yml` lints, typechecks, tests, and builds changed packages via Turborepo, validates Terraform, audits workflows, and builds + smoke-tests images of affected apps. Branch protection only requires the aggregate `CI` check.
 
 3. **Merge to `main`**:
-   - `infra.yml` provisions the Cloud Run service shell with the initial placeholder image via scoped infrastructure automation.
-   - `cd.yml` dynamically detects the changed application via Turborepo, builds the production container using the centralized root `Dockerfile` (`gcr.io/distroless/nodejs24-debian12:nonroot`), runs candidate revision smoke tests, and promotes traffic.
+   - After `CI` passes, the same run calls `infra.yml` (dev, then production) if `infra/` or an `infra.json` changed, provisioning the Cloud Run service shell.
+   - It then calls `cd.yml` once per affected app, which publishes the container (root `Dockerfile`, `gcr.io/distroless/nodejs24-debian13:nonroot`), runs candidate revision smoke tests, and promotes traffic in dev and then production.
 
 No manual `.tf` edits, per-app workflows, or operator pre-apply steps are required.
 

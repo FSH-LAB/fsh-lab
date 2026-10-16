@@ -148,7 +148,7 @@ run "infra_identity_is_strictly_scoped" {
   command = plan
 
   assert {
-    condition     = local.infra_applier_principal_attribute == "attribute.job_workflow_ref/FSH-LAB/fsh-lab/.github/workflows/infra.yml@refs/heads/main"
+    condition     = local.infra_applier_principal_attribute == "attribute.workflow_ref/FSH-LAB/fsh-lab/.github/workflows/infra.yml@refs/heads/main"
     error_message = "Infra identity trust must be restricted to verified infra.yml workflow claims."
   }
 

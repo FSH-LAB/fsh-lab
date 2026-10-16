@@ -1,5 +1,9 @@
 name: CI
 
+# Single pipeline for every change:
+#   verify (code | workflows | infra | images)  ->  CI gate  ->  [main only] infra apply  ->  per-app delivery (cd.yml)
+# Branch protection only needs to require the "CI" gate; new jobs and apps never require ruleset changes.
+
 on:
   pull_request:
     branches: [main]
@@ -12,11 +16,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify:
+  code:
     name: Verify Code
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -35,22 +39,61 @@ jobs:
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
-      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository]
+      - uses: ./.github/actions/setup-workspace
         with:
           install: "true"
       - run: pnpm format:check
-      - name: Install actionlint
-        env:
-          VERSION: 1.7.12
-          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      - name: Lint, typecheck and build
         run: |
-          archive="actionlint_${VERSION}_linux_amd64.tar.gz"
-          curl -fsSLo "$RUNNER_TEMP/$archive" \
-            "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${archive}"
-          echo "$SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-      - run: pnpm lint:workflows
+          [ "$GITHUB_EVENT_NAME" = pull_request ] && set -- --affected
+          pnpm turbo run lint typecheck build "$@"
+      - run: pnpm test:coverage
+      - name: Upload code coverage
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-code-coverage@2b21a77928be8d5168c2b9581a67f2adbebacc52 # v1.4.4
+        with:
+          file: coverage/cobertura-coverage.xml
+          language: TypeScript
+          label: code-coverage-agent
+      - name: Detect changes
+        id: changes
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          echo "apps=$(pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')" >> "$GITHUB_OUTPUT"
+          if git diff --quiet "${BEFORE:-HEAD^}" HEAD -- infra 'apps/*/infra.json' .github/workflows/infra.yml; then
+            echo "infra=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "infra=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  workflows:
+    name: Verify workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint workflows with actionlint
+        run: docker run --rm --volume "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
+      - name: Audit workflows with zizmor
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          version: v1.30.1
+          persona: auditor
+          advanced-security: false
+          annotations: true
+          config: .github/zizmor.yml
+
+  infra:
+    name: Verify infrastructure
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Scan infrastructure configuration
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -64,7 +107,7 @@ jobs:
         with:
           terraform_version: 1.9.8
           terraform_wrapper: false
-      - name: Validate infrastructure without cloud credentials
+      - name: Validate and test Terraform
         run: |
           terraform fmt -check -recursive infra
           for root in infra infra/github; do
@@ -122,8 +165,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: ./.github/actions/build-image
+        id: image
+        with:
+          app: ${{ matrix.app }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           package-manager-cache: false

@@ -3,3 +3,6 @@ rules:
     config:
       policies:
         "*": hash-pin
+  # Local actions/workflows (./.github/...) are intentional; the "$/" syntax adds nothing here.
+  self-repository:
+    disable: true

@@ -53,7 +53,7 @@ locals {
   }
 
   # Only the infra.yml workflow on main may impersonate the infra applier.
-  infra_applier_principal_attribute = "attribute.job_workflow_ref/${var.github_repository}/.github/workflows/infra.yml@refs/heads/main"
+  infra_applier_principal_attribute = "attribute.workflow_ref/${var.github_repository}/.github/workflows/infra.yml@refs/heads/main"
 }
 
 # ---------------------------------------------------------------------------
