@@ -66,17 +66,17 @@ Adding a new application is powered by zero-touch GitOps discovery:
    Create `apps/<name>` containing `infra.json`, `package.json`, `/api/health`, and `tests/smoke.mjs` (see [`.agents/skills/add-app/SKILL.md`](.agents/skills/add-app/SKILL.md) for the universal boundary contracts and runbook).
 
 2. **Open a Pull Request**:
-   - `ci.yml` lints, typechecks, tests, and builds changed packages via Turborepo, and validates Terraform configurations and infrastructure assertions.
+   - `ci.yml` lints, typechecks, tests, and builds changed packages via Turborepo, validates Terraform, audits workflows, and builds + smoke-tests images of affected apps. Branch protection only requires the aggregate `CI` check.
 
 3. **Merge to `main`**:
-   - `infra.yml` provisions the Cloud Run service shell with the initial placeholder image via scoped infrastructure automation.
-   - `cd.yml` dynamically detects the changed application via Turborepo, builds the production container using the centralized root `Dockerfile` (`gcr.io/distroless/nodejs24-debian12:nonroot`), runs candidate revision smoke tests, and promotes traffic.
+   - After `CI` passes, the same run calls `infra.yml` (dev, then production) if `infra/` or an `infra.json` changed, provisioning the Cloud Run service shell.
+   - It then calls `cd.yml` once per affected app, which publishes the container (root `Dockerfile`, `gcr.io/distroless/nodejs24-debian13:nonroot`), runs candidate revision smoke tests, and promotes traffic in dev and then production.
 
 No manual `.tf` edits, per-app workflows, or operator pre-apply steps are required.
 
 ## Architecture & CI/CD
 
-- **CI (`.github/workflows/ci.yml`)**: Runs on pull requests and pushes to `main`. Leverages Turborepo affected filtering (`--affected`) and remote/workflow action caching to test changed packages and their dependents rapidly.
-- **CD (`.github/workflows/cd.yml` -> `_cd-app.yml` -> `.github/actions/cloud-run-rollout`)**: Dynamic matrix orchestrator detects affected apps under `apps/*`, builds minimal Distroless containers with BuildKit caching, scans with Trivy, attests provenance, and deploys to Google Cloud Run across `dev` and `production` (with manual rollbacks enabled via `rollback.yml`).
+- **CI (`.github/workflows/ci.yml`)**: The single pipeline entry point. Parallel verify jobs (code, workflows, infrastructure, images) feed one `CI` gate; on `main` it continues into infrastructure apply and per-app delivery. Uses Turborepo affected detection, so new apps need no workflow changes.
+- **CD (`.github/workflows/cd.yml` -> `.github/actions/build-image`, `.github/actions/cloud-run-rollout`)**: Reusable per-app delivery: builds a minimal Distroless image with BuildKit caching, scans with Trivy, attests provenance, and deploys to Google Cloud Run in `dev` then `production`. Each app runs independently and deliveries are serialized per app. Use `rollback.yml` to redeploy an earlier release.
 - **Candidate Verification**: Deployments roll out to a tagged `--no-traffic` candidate revision first, run automated smoke tests against the candidate URL, and only promote traffic to 100% upon success.
 - **Infrastructure (`infra/`)**: Reusable Terraform modules (`infra/modules/cloud-run-app`) with auto-discovery of `apps/*/infra.json` manifests deployed via `.github/workflows/infra.yml`. Workload Identity Federation (WIF) eliminates long-lived service account keys.

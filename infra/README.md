@@ -1,6 +1,6 @@
 # Infrastructure
 
-The dedicated Infrastructure workflow applies the Terraform configuration for each environment (`dev`, `production`) on push to `main` when `infra/` changes. Application deployment workflows update Cloud Run revisions without running Terraform. A separate root manages GitHub environments and deployment variables.
+The reusable Infrastructure workflow (`infra.yml`) applies the Terraform configuration for each environment (`dev`, then `production`). `ci.yml` calls it on push to `main` when `infra/` or an `apps/*/infra.json` changes, before app delivery; it can also be dispatched manually per environment. Application deployment workflows update Cloud Run revisions without running Terraform. A separate root manages GitHub environments and deployment variables.
 
 All environments use `europe-north2`. The region is fixed in Terraform to match the deployment workflow and registry endpoint.
 
@@ -16,6 +16,8 @@ The state prefix currently remains `helgefolelse/<env>` to protect existing stat
 ## Infrastructure Identity Bootstrap (`fsh-lab-infra`)
 
 The CI workflow `infra.yml` uses the dedicated `fsh-lab-infra` service account (`GCP_INFRA_SERVICE_ACCOUNT`). Because standard CI identities cannot escalate project privileges or grant IAM roles, bootstrapping this identity requires an initial operator apply:
+
+The OIDC `attribute.workflow_ref` mapping uses `job_workflow_ref` for reusable workflow calls and `workflow_ref` for manual runs. Both paths restrict impersonation to `infra.yml` on `main`, in the matching repository and environment. Existing environments need an operator apply to update this mapping before automated infrastructure runs can use it.
 
 1. Apply `infra/` with operator credentials for each environment:
    ```sh

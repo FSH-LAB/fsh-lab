@@ -55,7 +55,7 @@ Every application added to `apps/<app>` must adhere to these contracts:
    - Auto-discovered by `infra/main.tf` via `fileset()` and provisioned through `modules/cloud-run-app`.
    - No manual edits to `.tf` files or local `terraform apply` runs required.
 6. **Continuous Delivery Contract (GitHub Actions Dynamic Matrix)**:
-   - Deployments are fanned out automatically by the root `.github/workflows/cd.yml` matrix using Turborepo affected package discovery.
+   - Deployments are fanned out automatically: `.github/workflows/ci.yml` detects affected apps via Turborepo and calls the reusable `.github/workflows/cd.yml` once per app.
    - No per-app workflow files needed.
 7. **Task Orchestration (Turborepo & Catalogs)**:
    - Pinned dependencies leverage pnpm catalogs (`"next": "catalog:"`, `"react": "catalog:"`, etc.).

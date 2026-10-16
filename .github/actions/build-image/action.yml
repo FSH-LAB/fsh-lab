@@ -1,0 +1,61 @@
+name: "Build Image"
+description: "Builds an app image from apps/<app>/Dockerfile (or the root Dockerfile), then scans it. Loads locally by default; pushes with SBOM and provenance when push is true."
+
+inputs:
+  app:
+    description: "Application name (directory under apps/)"
+    required: true
+  push:
+    description: "Push to GHCR with SBOM and provenance instead of loading into the local Docker daemon"
+    required: false
+    default: "false"
+
+outputs:
+  image:
+    description: "Image name without tag (ghcr.io/<owner>/<app>-web)"
+    value: ${{ steps.resolve.outputs.image }}
+  digest:
+    description: "Pushed image digest (only when push is true)"
+    value: ${{ steps.build.outputs.digest }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve image and Dockerfile
+      id: resolve
+      shell: bash
+      env:
+        APP: ${{ inputs.app }}
+      run: |
+        dockerfile="apps/$APP/Dockerfile"
+        [ -f "$dockerfile" ] || dockerfile=Dockerfile
+        printf 'dockerfile=%s\nimage=ghcr.io/%s/%s-web\n' "$dockerfile" "${GITHUB_REPOSITORY_OWNER,,}" "$APP" >> "$GITHUB_OUTPUT"
+
+    - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+    - name: Build image
+      id: build
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: ${{ steps.resolve.outputs.dockerfile }}
+        build-args: APP_NAME=${{ inputs.app }}
+        push: ${{ inputs.push == 'true' }}
+        load: ${{ inputs.push != 'true' }}
+        tags: ${{ steps.resolve.outputs.image }}:${{ github.sha }}
+        labels: |
+          org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+        cache-from: type=gha,scope=${{ inputs.app }}-web
+        cache-to: ${{ inputs.push == 'true' && format('type=gha,mode=max,scope={0}-web', inputs.app) || '' }}
+        sbom: ${{ inputs.push == 'true' }}
+        provenance: ${{ inputs.push == 'true' && 'mode=max' || 'false' }}
+
+    - name: Scan image
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      with:
+        image-ref: ${{ steps.resolve.outputs.image }}:${{ github.sha }}
+        format: table
+        exit-code: "1"
+        severity: HIGH,CRITICAL
+        ignore-unfixed: true
