@@ -89,6 +89,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository]
+        with:
+          install: "true"
+      - name: Verify app and dependencies
+        env:
+          APP: ${{ matrix.app }}
+        run: pnpm turbo run lint typecheck test build --filter="$APP..."
       - name: Resolve image name
         id: image
         env:
@@ -173,13 +180,37 @@ jobs:
           GH_REPO: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          run_id="$(gh run list --workflow=infra.yml --commit="$COMMIT_SHA" --status=in_progress --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
-          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
-            run_id="$(gh run list --workflow=infra.yml --commit="$COMMIT_SHA" --status=queued --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
-          fi
+          run_id=""
+          for attempt in $(seq 1 12); do
+            run_id="$(gh run list --repo="$GH_REPO" --workflow=infra.yml --commit="$COMMIT_SHA" --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
+            if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
+              break
+            fi
+            echo "Waiting for infrastructure workflow run (attempt $attempt/12)..."
+            sleep 5
+          done
           if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
-            echo "Waiting for active infrastructure workflow run $run_id..."
-            gh run watch "$run_id" --exit-status || { echo "::error::Infrastructure provisioning failed"; exit 1; }
+            echo "Waiting for Apply dev in infrastructure workflow run $run_id..."
+            while true; do
+              run_info="$(gh run view "$run_id" --repo="$GH_REPO" --json status,jobs)"
+              job_info="$(jq -c '[.jobs[] | select(.name == "Apply dev")][0] // {}' <<< "$run_info")"
+              status="$(jq -r '.status // empty' <<< "$job_info")"
+              conclusion="$(jq -r '.conclusion // empty' <<< "$job_info")"
+              if [ "$status" = "completed" ]; then
+                if [ "$conclusion" = "success" ]; then
+                  echo "Apply dev completed with conclusion: $conclusion"
+                  break
+                fi
+                echo "::error::Infrastructure provisioning for dev failed with conclusion: $conclusion"
+                exit 1
+              fi
+              if [ "$(jq -r '.status' <<< "$run_info")" = "completed" ] && [ -z "$status" ]; then
+                echo "::error::Infrastructure workflow completed without an Apply dev result"
+                exit 1
+              fi
+              echo "Waiting for Apply dev (current status: ${status:-not started})..."
+              sleep 10
+            done
           fi
       - uses: ./.github/actions/cloud-run-rollout # zizmor: ignore[self-repository]
         id: rollout
@@ -202,6 +233,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
+      actions: read # Check infrastructure workflow run status.
       attestations: read # Verify image build provenance.
       contents: write # Create GitHub releases.
       packages: write # Move environment tag in GHCR.
@@ -216,6 +248,44 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Await infrastructure provisioning (production)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          run_id=""
+          for attempt in $(seq 1 12); do
+            run_id="$(gh run list --repo="$GH_REPO" --workflow=infra.yml --commit="$COMMIT_SHA" --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
+            if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
+              break
+            fi
+            echo "Waiting for infrastructure workflow run (attempt $attempt/12)..."
+            sleep 5
+          done
+          if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
+            echo "Waiting for Apply production in infrastructure workflow run $run_id..."
+            while true; do
+              run_info="$(gh run view "$run_id" --repo="$GH_REPO" --json status,jobs)"
+              job_info="$(jq -c '[.jobs[] | select(.name == "Apply production")][0] // {}' <<< "$run_info")"
+              status="$(jq -r '.status // empty' <<< "$job_info")"
+              conclusion="$(jq -r '.conclusion // empty' <<< "$job_info")"
+              if [ "$status" = "completed" ]; then
+                if [ "$conclusion" = "success" ]; then
+                  echo "Production infrastructure provisioning succeeded."
+                  break
+                fi
+                echo "::error::Infrastructure provisioning for production did not succeed (conclusion: $conclusion)"
+                exit 1
+              fi
+              if [ "$(jq -r '.status' <<< "$run_info")" = "completed" ] && [ -z "$status" ]; then
+                echo "::error::Infrastructure workflow completed without an Apply production result"
+                exit 1
+              fi
+              echo "Waiting for Apply production (current status: ${status:-not started})..."
+              sleep 10
+            done
+          fi
       - uses: ./.github/actions/cloud-run-rollout # zizmor: ignore[self-repository]
         id: rollout
         with:

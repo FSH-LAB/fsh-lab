@@ -152,9 +152,30 @@ runs:
         CLOUDSDK_CORE_PROJECT: ${{ inputs.gcp_project_id }}
         CLOUDSDK_RUN_REGION: ${{ inputs.region }}
         CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
+        APP: ${{ inputs.app }}
+        ENVIRONMENT: ${{ inputs.environment }}
       run: |
+        env_vars="GIT_SHA=$SHA"
+        manifest="apps/$APP/infra.json"
+        if [ -f "$manifest" ]; then
+          manifest_env=$(jq -r '.env // {} | to_entries[] | "\(.key)=\(.value)"' "$manifest" 2>/dev/null || true)
+          for item in $manifest_env; do
+            if [ -n "$item" ]; then
+              env_vars="$env_vars,$item"
+            fi
+          done
+        fi
+        if [ "$APP" = "status" ]; then
+          env_vars="$env_vars,GCP_PROJECT_ID=$CLOUDSDK_CORE_PROJECT"
+          if [ "$ENVIRONMENT" != "production" ]; then
+            helge_url="$(gcloud run services describe helgefolelse-web --format='value(status.url)' 2>/dev/null || true)"
+            if [ -n "$helge_url" ]; then
+              env_vars="$env_vars,HELGEFOLELSE_URL=$helge_url,HELGEFOLELSE_HEALTH_URL=$helge_url/api/health"
+            fi
+          fi
+        fi
         gcloud run deploy "$SERVICE" --image "$IMAGE" --no-traffic --tag candidate \
-          --update-env-vars "GIT_SHA=$SHA"
+          --update-env-vars "$env_vars"
         gcloud run services describe "$SERVICE" --format=json |
           jq -er '.status.traffic[] | select(.tag == "candidate") |
             "url=\(.url)\nrevision=\(.revisionName)"' >> "$GITHUB_OUTPUT"
