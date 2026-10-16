@@ -165,3 +165,27 @@ jobs:
           exit-code: "1"
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+
+  image-gate:
+    name: Verify image
+    needs: [verify, image]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Verify image status
+        env:
+          VERIFY_RESULT: ${{ needs.verify.result }}
+          IMAGE_RESULT: ${{ needs.image.result }}
+        run: |
+          if [ "$VERIFY_RESULT" != "success" ]; then
+            echo "::error::Verify Code did not succeed"
+            exit 1
+          fi
+          if [ "$IMAGE_RESULT" = "failure" ] || [ "$IMAGE_RESULT" = "cancelled" ]; then
+            echo "::error::One or more image verifications failed"
+            exit 1
+          fi
+          echo "All affected images verified successfully (or none affected)."
