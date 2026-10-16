@@ -155,28 +155,32 @@ runs:
         APP: ${{ inputs.app }}
         ENVIRONMENT: ${{ inputs.environment }}
       run: |
-        env_vars=""
+        manifest_env='{}'
         manifest="apps/$APP/infra.json"
         if [ -f "$manifest" ]; then
-          manifest_env=$(jq -r '.env // {} | to_entries[] | select(.key != "GIT_SHA") | "\(.key)=\(.value)"' "$manifest")
-          while IFS= read -r item; do
-            if [ -n "$item" ]; then
-              env_vars="${env_vars:+$env_vars,}$item"
-            fi
-          done <<< "$manifest_env"
+          manifest_env="$(jq -c '.env // {} | del(.GIT_SHA)' "$manifest")"
         fi
-        if [ "$APP" = "status" ]; then
-          env_vars="${env_vars:+$env_vars,}GCP_PROJECT_ID=$CLOUDSDK_CORE_PROJECT"
-          if [ "$ENVIRONMENT" != "production" ]; then
-            helge_url="$(gcloud run services describe helgefolelse-web --format='value(status.url)' 2>/dev/null || true)"
-            if [ -n "$helge_url" ]; then
-              env_vars="$env_vars,HELGEFOLELSE_URL=$helge_url,HELGEFOLELSE_HEALTH_URL=$helge_url/api/health"
-            fi
-          fi
+        helge_url=""
+        if [ "$APP" = "status" ] && [ "$ENVIRONMENT" != "production" ]; then
+          helge_url="$(gcloud run services describe helgefolelse-web --format='value(status.url)' 2>/dev/null || true)"
         fi
-        env_vars="${env_vars:+$env_vars,}GIT_SHA=$SHA"
+        jq -n \
+          --argjson manifest_env "$manifest_env" \
+          --arg app "$APP" \
+          --arg environment "$ENVIRONMENT" \
+          --arg project "$CLOUDSDK_CORE_PROJECT" \
+          --arg helge_url "$helge_url" \
+          --arg sha "$SHA" \
+          '($manifest_env
+            + (if $app == "status" then
+                {GCP_PROJECT_ID: $project} +
+                (if $environment != "production" and $helge_url != "" then
+                  {HELGEFOLELSE_URL: $helge_url, HELGEFOLELSE_HEALTH_URL: ($helge_url + "/api/health")}
+                 else {} end)
+               else {} end)
+            + {GIT_SHA: $sha})' > "$RUNNER_TEMP/env-vars.yaml"
         gcloud run deploy "$SERVICE" --image "$IMAGE" --no-traffic --tag candidate \
-          --update-env-vars "$env_vars"
+          --env-vars-file "$RUNNER_TEMP/env-vars.yaml"
         gcloud run services describe "$SERVICE" --format=json |
           jq -er '.status.traffic[] | select(.tag == "candidate") |
             "url=\(.url)\nrevision=\(.revisionName)"' >> "$GITHUB_OUTPUT"
