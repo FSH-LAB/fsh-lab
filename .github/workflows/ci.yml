@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      code-quality: write
+      code-quality: write # Upload code coverage report.
     outputs:
       apps: ${{ steps.affected.outputs.apps }}
     steps:
@@ -92,7 +92,7 @@ jobs:
       - name: Run test suite with coverage
         run: pnpm test:coverage
       - name: Upload code coverage
-        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/upload-code-coverage@2b21a77928be8d5168c2b9581a67f2adbebacc52 # v1.4.4
         with:
           file: coverage/cobertura-coverage.xml

@@ -78,9 +78,9 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: write
-      attestations: write
-      id-token: write
+      packages: write # Publish container images to GHCR.
+      attestations: write # Publish build provenance attestations.
+      id-token: write # Authenticate to GCP and sign provenance attestations.
     steps:
       - name: Validate app name
         env:
@@ -152,11 +152,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      actions: read
-      attestations: read
+      actions: read # Await infrastructure provisioning workflow runs.
+      attestations: read # Verify image build provenance.
       contents: read
-      packages: write
-      id-token: write
+      packages: write # Move environment tag in GHCR.
+      id-token: write # Authenticate to GCP using Workload Identity Federation.
     environment:
       name: dev
       url: ${{ steps.rollout.outputs.url }}
@@ -202,10 +202,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      attestations: read
-      contents: write
-      packages: write
-      id-token: write
+      attestations: read # Verify image build provenance.
+      contents: write # Create GitHub releases.
+      packages: write # Move environment tag in GHCR.
+      id-token: write # Authenticate to GCP using Workload Identity Federation.
     environment:
       name: production
       url: ${{ steps.rollout.outputs.url }}
