@@ -28,7 +28,8 @@ jobs:
       contents: read
       code-quality: write # Upload code coverage report.
     outputs:
-      apps: ${{ steps.affected.outputs.apps }}
+      apps: ${{ steps.changes.outputs.apps }}
+      infra: ${{ steps.changes.outputs.infra }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -115,52 +116,17 @@ jobs:
             terraform -chdir="$root" validate
           done
           terraform -chdir=infra test
-      - name: Audit workflows with zizmor
-        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
-        with:
-          version: v1.30.1
-          persona: auditor
-          advanced-security: false
-          annotations: true
-          config: .github/zizmor.yml
-      - name: Lint, typecheck and build
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            pnpm turbo run lint typecheck build --affected
-          else
-            pnpm turbo run lint typecheck build
-          fi
-      - name: Run test suite with coverage
-        run: pnpm test:coverage
-      - name: Upload code coverage
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/upload-code-coverage@2b21a77928be8d5168c2b9581a67f2adbebacc52 # v1.4.4
-        with:
-          file: coverage/cobertura-coverage.xml
-          language: TypeScript
-          label: code-coverage-agent
-      - name: Detect affected apps
-        id: affected
-        run: |
-          AFFECTED=$(CI=1 pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')
-          echo "Discovered affected apps: $AFFECTED"
-          echo "apps=$AFFECTED" >> "$GITHUB_OUTPUT"
 
   image:
     name: Verify image (${{ matrix.app }})
-    needs: verify
-    if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.verify.outputs.apps != '[]' && needs.verify.outputs.apps != ''
+    needs: code
+    if: github.event_name != 'push' && needs.code.outputs.apps != '[]'
     strategy:
       fail-fast: false
-      max-parallel: 4
       matrix:
-        app: ${{ fromJson(needs.verify.outputs.apps) }}
+        app: ${{ fromJSON(needs.code.outputs.apps) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -173,41 +139,63 @@ jobs:
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
-      - name: Resolve Dockerfile
-        id: dockerfile
-        env:
-          APP: ${{ matrix.app }}
-        run: |
-          if [ -f "apps/$APP/Dockerfile" ]; then
-            echo "file=apps/$APP/Dockerfile" >> "$GITHUB_OUTPUT"
-          else
-            echo "file=Dockerfile" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Build image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: ${{ steps.dockerfile.outputs.file }}
-          build-args: |
-            APP_NAME=${{ matrix.app }}
-          load: true
-          tags: ${{ matrix.app }}-web:ci
-          cache-from: type=gha,scope=${{ matrix.app }}-web
       - name: Smoke test image
         env:
           APP: ${{ matrix.app }}
+          IMAGE: ${{ steps.image.outputs.image }}
         run: |
-          docker run --detach --name web --publish 8080:8080 \
-            --env GIT_SHA="$GITHUB_SHA" "${APP}-web:ci"
-          if ! SHA="$GITHUB_SHA" SMOKE_URL=http://localhost:8080 node --test "apps/$APP/tests/smoke.mjs"; then
-            docker logs web
-            exit 1
-          fi
-      - name: Scan image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ${{ matrix.app }}-web:ci
-          format: table
-          exit-code: "1"
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
+          docker run --detach --name web --publish 8080:8080 --env GIT_SHA="$GITHUB_SHA" "$IMAGE:$GITHUB_SHA"
+          SHA="$GITHUB_SHA" SMOKE_URL=http://localhost:8080 node --test "apps/$APP/tests/smoke.mjs" || { docker logs web; exit 1; }
+
+  ci:
+    name: CI
+    needs: [code, workflows, infra, image]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all verification jobs to pass
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+
+  # ---------------------------------------------------------------------------
+  # Delivery (push to main only). Infra is applied before app rollouts so new services exist.
+  # ---------------------------------------------------------------------------
+
+  infra-dev:
+    name: Infra (dev)
+    needs: [code, ci]
+    if: github.event_name == 'push' && needs.code.outputs.infra == 'true'
+    uses: ./.github/workflows/infra.yml
+    with:
+      environment: dev
+    permissions:
+      contents: read # Check out infrastructure code.
+      id-token: write # Authenticate to GCP using Workload Identity Federation.
+
+  infra-production:
+    name: Infra (production)
+    needs: infra-dev
+    uses: ./.github/workflows/infra.yml
+    with:
+      environment: production
+    permissions:
+      contents: read # Check out infrastructure code.
+      id-token: write # Authenticate to GCP using Workload Identity Federation.
+
+  deploy:
+    name: Deliver (${{ matrix.app }})
+    needs: [code, ci, infra-production]
+    if: ${{ !cancelled() && !failure() && github.event_name == 'push' && needs.code.outputs.apps != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.code.outputs.apps) }}
+    uses: ./.github/workflows/cd.yml
+    with:
+      app: ${{ matrix.app }}
+    permissions:
+      attestations: write # Sign build provenance.
+      contents: write # Create GitHub releases.
+      id-token: write # Authenticate to GCP and sign provenance.
+      packages: write # Publish images and move environment tags in GHCR.

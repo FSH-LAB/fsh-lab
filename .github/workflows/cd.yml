@@ -1,24 +1,15 @@
 name: CD
 
-# Orchestrates multi-app continuous delivery to Google Cloud Run.
-# Dynamically discovers affected applications under apps/* via Turborepo and
-# runs pipeline stages (publish -> deploy-dev -> deploy-production) across a GitHub Actions matrix.
+# Delivers one app to Google Cloud Run: publish attested image -> deploy dev -> deploy production.
+# Called by ci.yml (one call per affected app) after verification passes on main.
+# Dispatch manually to rebuild and redeploy an app from main; use rollback.yml for an existing release.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
-      - "Dockerfile"
-      - ".nvmrc"
-      - ".dockerignore"
-      - ".github/workflows/cd.yml"
-      - ".github/actions/**"
+  workflow_call:
+    inputs:
+      app:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       app:
@@ -116,306 +107,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository]
-        with:
-          install: "true"
-      - name: Find affected apps
-        id: filter
-        env:
-          MANUAL_APP: ${{ inputs.app }}
-        run: |
-          if [ -n "$MANUAL_APP" ]; then
-            [[ "$MANUAL_APP" =~ ^[a-z][a-z0-9-]{1,20}[a-z0-9]$ ]] || { echo "::error::Invalid app: $MANUAL_APP"; exit 1; }
-            [ -d "apps/$MANUAL_APP" ] || { echo "::error::App directory apps/$MANUAL_APP not found"; exit 1; }
-            echo "Manual app specified: $MANUAL_APP"
-            echo "apps=[\"$MANUAL_APP\"]" >> "$GITHUB_OUTPUT"
-          else
-            AFFECTED=$(CI=1 pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')
-            echo "Discovered affected apps: $AFFECTED"
-            echo "apps=$AFFECTED" >> "$GITHUB_OUTPUT"
-          fi
-
-  verify-ci:
-    name: Verify CI (${{ github.sha }})
-    needs: detect-apps
-    if: ${{ needs.detect-apps.outputs.apps != '[]' && needs.detect-apps.outputs.apps != '' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      actions: read
-      contents: read
-    steps:
-      - name: Require successful CI for this commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          COMMIT_SHA: ${{ github.sha }}
-        run: |
-          runs="$(gh run list --repo "$GH_REPO" --workflow=ci.yml --commit="$COMMIT_SHA" \
-             --json databaseId,status,conclusion --limit 100)"
-          if jq -e 'any(.[]; .conclusion == "success")' <<< "$runs" > /dev/null; then
-             echo "CI has succeeded for $COMMIT_SHA."
-             exit 0
-          fi
-          run_id="$(jq -r '[.[] | select(.status == "in_progress" or .status == "queued")][0].databaseId // empty' <<< "$runs")"
-          if [ -z "$run_id" ]; then
-             echo "::error::No successful or active CI run found for $COMMIT_SHA"
-             exit 1
-          fi
-          gh run watch "$run_id" --repo "$GH_REPO" --exit-status
-
-  publish:
-    name: Publish image (${{ matrix.app }})
-    needs: [detect-apps, verify-ci]
-    if: ${{ needs.detect-apps.outputs.apps != '[]' && needs.detect-apps.outputs.apps != '' }}
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        app: ${{ fromJson(needs.detect-apps.outputs.apps) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write # Publish container images to GHCR.
-      attestations: write # Publish build provenance attestations.
-      id-token: write # Authenticate to GCP and sign provenance attestations.
-    steps:
-      - name: Validate app name
-        env:
-          APP: ${{ matrix.app }}
-        run: '[[ "$APP" =~ ^[a-z][a-z0-9-]{1,20}[a-z0-9]$ ]] || { echo "::error::Invalid app: $APP"; exit 1; }'
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Resolve image name
-        id: image
-        env:
-          APP: ${{ matrix.app }}
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$APP-web" >> "$GITHUB_OUTPUT"
-      - name: Resolve Dockerfile
-        id: dockerfile
-        env:
-          APP: ${{ matrix.app }}
-        run: |
-          if [ -f "apps/$APP/Dockerfile" ]; then
-            echo "file=apps/$APP/Dockerfile" >> "$GITHUB_OUTPUT"
-          else
-            echo "file=Dockerfile" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and publish image
-        id: build
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: ${{ steps.dockerfile.outputs.file }}
-          build-args: |
-            APP_NAME=${{ matrix.app }}
-          push: true
-          tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha,scope=${{ matrix.app }}-web
-          cache-to: type=gha,mode=max,scope=${{ matrix.app }}-web
-          sbom: true
-          provenance: mode=max
-      - name: Scan published image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
-          format: table
-          exit-code: "1"
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-name: ${{ steps.image.outputs.name }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-
-  deploy-dev:
-    name: Deploy dev (${{ matrix.app }})
-    needs: [detect-apps, publish]
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        app: ${{ fromJson(needs.detect-apps.outputs.apps) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      actions: read # Check infrastructure provisioning jobs.
-      attestations: read # Verify image build provenance.
-      contents: read
-      packages: write # Move environment tag in GHCR.
-      id-token: write # Authenticate to GCP using Workload Identity Federation.
-    environment:
-      name: dev
-      url: ${{ steps.rollout.outputs.url }}
-    concurrency:
-      group: deploy-${{ matrix.app }}-dev
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Await infrastructure provisioning (dev)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          COMMIT_SHA: ${{ github.sha }}
-        run: |
-          while true; do
-            runs="$(gh run list --repo "$GH_REPO" --workflow=infra.yml --commit="$COMMIT_SHA" \
-              --json databaseId --limit 100)"
-            run_id=""
-            while IFS= read -r candidate; do
-              [ -n "$candidate" ] || continue
-              jobs="$(gh api "repos/$GH_REPO/actions/runs/$candidate/jobs?per_page=100")"
-              job="$(jq -c '[.jobs[] | select(.name == "Apply dev")][0] // empty' <<< "$jobs")"
-              if [ -z "$job" ]; then
-                run_status="$(gh run view "$candidate" --repo "$GH_REPO" --json status --jq .status)"
-                if [ "$run_status" = "completed" ]; then
-                  echo "::error::Infrastructure run completed without an Apply dev job"
-                  exit 1
-                fi
-                run_id="$candidate"
-                break
-              fi
-              status="$(jq -r '.status' <<< "$job")"
-              conclusion="$(jq -r '.conclusion // empty' <<< "$job")"
-              if [ "$status" = "completed" ]; then
-                if [ "$conclusion" = "success" ]; then
-                  echo "Dev infrastructure provisioning succeeded."
-                  exit 0
-                fi
-                if [ "$conclusion" = "skipped" ] &&
-                  jq -e 'any(.jobs[]; .name == "Verify Infrastructure" and .conclusion == "success") and
-                    any(.jobs[]; .name == "Apply production")' <<< "$jobs" > /dev/null; then
-                  echo "Skipping infrastructure run without a dev apply."
-                  continue
-                fi
-                echo "::error::Dev infrastructure provisioning concluded $conclusion"
-                exit 1
-              fi
-              run_id="$candidate"
-              break
-            done <<< "$(jq -r '.[].databaseId' <<< "$runs")"
-            if [ -z "$run_id" ]; then
-              echo "No infrastructure run requires dev provisioning for $COMMIT_SHA."
-              exit 0
-            fi
-            echo "Waiting for Apply dev in infrastructure workflow run $run_id..."
-            sleep 15
-          done
-      - uses: ./.github/actions/cloud-run-rollout # zizmor: ignore[self-repository]
+      - uses: ./.github/actions/cloud-run-rollout
         id: rollout
         with:
-          app: ${{ matrix.app }}
-          environment: dev
-          release: ${{ github.sha }}
-          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
-          gcp_wif_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          gcp_deploy_service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-
-  deploy-production:
-    name: Deploy production (${{ matrix.app }})
-    needs: [detect-apps, deploy-dev]
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        app: ${{ fromJson(needs.detect-apps.outputs.apps) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      actions: read # Check infrastructure provisioning jobs.
-      attestations: read # Verify image build provenance.
-      contents: write # Create GitHub releases.
-      packages: write # Move environment tag in GHCR.
-      id-token: write # Authenticate to GCP using Workload Identity Federation.
-    environment:
-      name: production
-      url: ${{ steps.rollout.outputs.url }}
-    concurrency:
-      group: deploy-${{ matrix.app }}-production
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Await infrastructure provisioning (production)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          COMMIT_SHA: ${{ github.sha }}
-        run: |
-          while true; do
-            runs="$(gh run list --repo "$GH_REPO" --workflow=infra.yml --commit="$COMMIT_SHA" \
-              --json databaseId --limit 100)"
-            run_id=""
-            while IFS= read -r candidate; do
-              [ -n "$candidate" ] || continue
-              jobs="$(gh api "repos/$GH_REPO/actions/runs/$candidate/jobs?per_page=100")"
-              job="$(jq -c '[.jobs[] | select(.name == "Apply production")][0] // empty' <<< "$jobs")"
-              if [ -z "$job" ]; then
-                run_status="$(gh run view "$candidate" --repo "$GH_REPO" --json status --jq .status)"
-                if [ "$run_status" = "completed" ]; then
-                  echo "::error::Infrastructure run completed without an Apply production job"
-                  exit 1
-                fi
-                run_id="$candidate"
-                break
-              fi
-              status="$(jq -r '.status' <<< "$job")"
-              conclusion="$(jq -r '.conclusion // empty' <<< "$job")"
-              if [ "$status" = "completed" ]; then
-                if [ "$conclusion" = "success" ]; then
-                  echo "Production infrastructure provisioning succeeded."
-                  exit 0
-                fi
-                if [ "$conclusion" = "skipped" ] &&
-                  jq -e 'any(.jobs[]; .name == "Verify Infrastructure" and .conclusion == "success") and
-                    any(.jobs[]; .name == "Apply dev" and .conclusion == "success")' <<< "$jobs" > /dev/null; then
-                  echo "Skipping infrastructure run without a production apply."
-                  continue
-                fi
-                echo "::error::Production infrastructure provisioning concluded $conclusion"
-                exit 1
-              fi
-              run_id="$candidate"
-              break
-            done <<< "$(jq -r '.[].databaseId' <<< "$runs")"
-            if [ -z "$run_id" ]; then
-              echo "No infrastructure run requires production provisioning for $COMMIT_SHA."
-              exit 0
-            fi
-            echo "Waiting for Apply production in infrastructure workflow run $run_id..."
-            sleep 15
-          done
-      - uses: ./.github/actions/cloud-run-rollout # zizmor: ignore[self-repository]
-        id: rollout
-        with:
-          app: ${{ matrix.app }}
+          app: ${{ inputs.app }}
           environment: production
           release: ${{ github.sha }}
+          digest: ${{ needs.publish.outputs.digest }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
           gcp_wif_provider: ${{ vars.GCP_WIF_PROVIDER }}
           gcp_deploy_service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-          APP: ${{ matrix.app }}
+          GH_REPO: ${{ github.repository }}
+          APP: ${{ inputs.app }}
         run: |
           tag="$APP@v$(date -u +%Y.%-m).$GITHUB_RUN_NUMBER"
-          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" --title "$tag" --generate-notes
-          fi
+          gh release view "$tag" > /dev/null 2>&1 ||
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --generate-notes
