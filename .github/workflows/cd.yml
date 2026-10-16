@@ -1,165 +1,67 @@
 name: CD
 
-# Orchestrates multi-app continuous delivery to Google Cloud Run.
-# Dynamically discovers affected applications under apps/* via Turborepo and
-# runs pipeline stages (publish -> deploy-dev -> deploy-production) across a GitHub Actions matrix.
+# Delivers one app to Google Cloud Run: publish attested image -> deploy dev -> deploy production.
+# Called by ci.yml (one call per affected app) after verification passes on main.
+# Dispatch manually to rebuild and redeploy an app from main; use rollback.yml for an existing release.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
-      - "Dockerfile"
-      - ".nvmrc"
-      - ".dockerignore"
-      - ".github/workflows/cd.yml"
-      - ".github/actions/**"
+  workflow_call:
+    inputs:
+      app:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       app:
-        description: Specific application to deploy (leave blank to deploy all affected)
-        required: false
+        description: Application to build and deploy from main
+        required: true
         type: string
-        default: ""
 
 permissions:
   contents: read
 
+# Serialize per app so an older commit can never be promoted after a newer one.
 concurrency:
-  group: cd-orchestrator-${{ github.ref }}
+  group: cd-${{ inputs.app }}
   cancel-in-progress: false
 
 jobs:
-  detect-apps:
-    name: Detect affected apps
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      apps: ${{ steps.filter.outputs.apps }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 2
-          persist-credentials: false
-      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository]
-        with:
-          install: "true"
-      - name: Find affected apps
-        id: filter
-        env:
-          MANUAL_APP: ${{ inputs.app }}
-        run: |
-          if [ -n "$MANUAL_APP" ]; then
-            [[ "$MANUAL_APP" =~ ^[a-z][a-z0-9-]{1,20}[a-z0-9]$ ]] || { echo "::error::Invalid app: $MANUAL_APP"; exit 1; }
-            [ -d "apps/$MANUAL_APP" ] || { echo "::error::App directory apps/$MANUAL_APP not found"; exit 1; }
-            echo "Manual app specified: $MANUAL_APP"
-            echo "apps=[\"$MANUAL_APP\"]" >> "$GITHUB_OUTPUT"
-          else
-            AFFECTED=$(CI=1 pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')
-            echo "Discovered affected apps: $AFFECTED"
-            echo "apps=$AFFECTED" >> "$GITHUB_OUTPUT"
-          fi
-
   publish:
-    name: Publish image (${{ matrix.app }})
-    needs: detect-apps
-    if: ${{ needs.detect-apps.outputs.apps != '[]' && needs.detect-apps.outputs.apps != '' }}
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        app: ${{ fromJson(needs.detect-apps.outputs.apps) }}
+    name: Publish image
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
       packages: write # Publish container images to GHCR.
       attestations: write # Publish build provenance attestations.
-      id-token: write # Authenticate to GCP and sign provenance attestations.
+      id-token: write # Sign provenance attestations.
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
     steps:
-      - name: Validate app name
-        env:
-          APP: ${{ matrix.app }}
-        run: '[[ "$APP" =~ ^[a-z][a-z0-9-]{1,20}[a-z0-9]$ ]] || { echo "::error::Invalid app: $APP"; exit 1; }'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-workspace # zizmor: ignore[self-repository]
-        with:
-          install: "true"
-      - name: Verify app and dependencies
-        env:
-          APP: ${{ matrix.app }}
-        run: pnpm turbo run lint typecheck test build --filter="$APP..."
-      - name: Resolve image name
-        id: image
-        env:
-          APP: ${{ matrix.app }}
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$APP-web" >> "$GITHUB_OUTPUT"
-      - name: Resolve Dockerfile
-        id: dockerfile
-        env:
-          APP: ${{ matrix.app }}
-        run: |
-          if [ -f "apps/$APP/Dockerfile" ]; then
-            echo "file=apps/$APP/Dockerfile" >> "$GITHUB_OUTPUT"
-          else
-            echo "file=Dockerfile" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and publish image
-        id: build
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - uses: ./.github/actions/build-image
+        id: image
         with:
-          context: .
-          file: ${{ steps.dockerfile.outputs.file }}
-          build-args: |
-            APP_NAME=${{ matrix.app }}
-          push: true
-          tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha,scope=${{ matrix.app }}-web
-          cache-to: type=gha,mode=max,scope=${{ matrix.app }}-web
-          sbom: true
-          provenance: mode=max
-      - name: Scan published image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+          app: ${{ inputs.app }}
+          push: "true"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
-          format: table
-          exit-code: "1"
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-name: ${{ steps.image.outputs.name }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-name: ${{ steps.image.outputs.image }}
+          subject-digest: ${{ steps.image.outputs.digest }}
 
   deploy-dev:
-    name: Deploy dev (${{ matrix.app }})
-    needs: [detect-apps, publish]
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        app: ${{ fromJson(needs.detect-apps.outputs.apps) }}
+    name: Deploy dev
+    needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      actions: read # Await infrastructure provisioning workflow runs.
       attestations: read # Verify image build provenance.
       contents: read
       packages: write # Move environment tag in GHCR.
@@ -168,72 +70,29 @@ jobs:
       name: dev
       url: ${{ steps.rollout.outputs.url }}
     concurrency:
-      group: deploy-${{ matrix.app }}-dev
+      group: deploy-${{ inputs.app }}-dev
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Await infrastructure provisioning (dev)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          COMMIT_SHA: ${{ github.sha }}
-        run: |
-          run_id=""
-          for attempt in $(seq 1 12); do
-            run_id="$(gh run list --repo="$GH_REPO" --workflow=infra.yml --commit="$COMMIT_SHA" --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
-            if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
-              break
-            fi
-            echo "Waiting for infrastructure workflow run (attempt $attempt/12)..."
-            sleep 5
-          done
-          if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
-            echo "Waiting for Apply dev in infrastructure workflow run $run_id..."
-            while true; do
-              run_info="$(gh run view "$run_id" --repo="$GH_REPO" --json status,jobs)"
-              job_info="$(jq -c '[.jobs[] | select(.name == "Apply dev")][0] // {}' <<< "$run_info")"
-              status="$(jq -r '.status // empty' <<< "$job_info")"
-              conclusion="$(jq -r '.conclusion // empty' <<< "$job_info")"
-              if [ "$status" = "completed" ]; then
-                if [ "$conclusion" = "success" ]; then
-                  echo "Apply dev completed with conclusion: $conclusion"
-                  break
-                fi
-                echo "::error::Infrastructure provisioning for dev failed with conclusion: $conclusion"
-                exit 1
-              fi
-              if [ "$(jq -r '.status' <<< "$run_info")" = "completed" ] && [ -z "$status" ]; then
-                echo "::error::Infrastructure workflow completed without an Apply dev result"
-                exit 1
-              fi
-              echo "Waiting for Apply dev (current status: ${status:-not started})..."
-              sleep 10
-            done
-          fi
-      - uses: ./.github/actions/cloud-run-rollout # zizmor: ignore[self-repository]
+      - uses: ./.github/actions/cloud-run-rollout
         id: rollout
         with:
-          app: ${{ matrix.app }}
+          app: ${{ inputs.app }}
           environment: dev
           release: ${{ github.sha }}
+          digest: ${{ needs.publish.outputs.digest }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
           gcp_wif_provider: ${{ vars.GCP_WIF_PROVIDER }}
           gcp_deploy_service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
   deploy-production:
-    name: Deploy production (${{ matrix.app }})
-    needs: [detect-apps, deploy-dev]
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        app: ${{ fromJson(needs.detect-apps.outputs.apps) }}
+    name: Deploy production
+    needs: [publish, deploy-dev]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      actions: read # Check infrastructure workflow run status.
       attestations: read # Verify image build provenance.
       contents: write # Create GitHub releases.
       packages: write # Move environment tag in GHCR.
@@ -242,66 +101,28 @@ jobs:
       name: production
       url: ${{ steps.rollout.outputs.url }}
     concurrency:
-      group: deploy-${{ matrix.app }}-production
+      group: deploy-${{ inputs.app }}-production
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Await infrastructure provisioning (production)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          COMMIT_SHA: ${{ github.sha }}
-        run: |
-          run_id=""
-          for attempt in $(seq 1 12); do
-            run_id="$(gh run list --repo="$GH_REPO" --workflow=infra.yml --commit="$COMMIT_SHA" --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
-            if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
-              break
-            fi
-            echo "Waiting for infrastructure workflow run (attempt $attempt/12)..."
-            sleep 5
-          done
-          if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
-            echo "Waiting for Apply production in infrastructure workflow run $run_id..."
-            while true; do
-              run_info="$(gh run view "$run_id" --repo="$GH_REPO" --json status,jobs)"
-              job_info="$(jq -c '[.jobs[] | select(.name == "Apply production")][0] // {}' <<< "$run_info")"
-              status="$(jq -r '.status // empty' <<< "$job_info")"
-              conclusion="$(jq -r '.conclusion // empty' <<< "$job_info")"
-              if [ "$status" = "completed" ]; then
-                if [ "$conclusion" = "success" ]; then
-                  echo "Production infrastructure provisioning succeeded."
-                  break
-                fi
-                echo "::error::Infrastructure provisioning for production did not succeed (conclusion: $conclusion)"
-                exit 1
-              fi
-              if [ "$(jq -r '.status' <<< "$run_info")" = "completed" ] && [ -z "$status" ]; then
-                echo "::error::Infrastructure workflow completed without an Apply production result"
-                exit 1
-              fi
-              echo "Waiting for Apply production (current status: ${status:-not started})..."
-              sleep 10
-            done
-          fi
-      - uses: ./.github/actions/cloud-run-rollout # zizmor: ignore[self-repository]
+      - uses: ./.github/actions/cloud-run-rollout
         id: rollout
         with:
-          app: ${{ matrix.app }}
+          app: ${{ inputs.app }}
           environment: production
           release: ${{ github.sha }}
+          digest: ${{ needs.publish.outputs.digest }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
           gcp_wif_provider: ${{ vars.GCP_WIF_PROVIDER }}
           gcp_deploy_service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-          APP: ${{ matrix.app }}
+          GH_REPO: ${{ github.repository }}
+          APP: ${{ inputs.app }}
         run: |
           tag="$APP@v$(date -u +%Y.%-m).$GITHUB_RUN_NUMBER"
-          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" --title "$tag" --generate-notes
-          fi
+          gh release view "$tag" > /dev/null 2>&1 ||
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --generate-notes

@@ -1,6 +1,6 @@
 {
   "$schema": "https://v2-11-7.turborepo.dev/schema.json",
-  "globalDependencies": [".nvmrc", ".dockerignore"],
+  "globalDependencies": [".nvmrc", ".dockerignore", "Dockerfile"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
