@@ -17,5 +17,6 @@
     { "text": "Use bullet points (*) in the body for multiple changes." },
     { "text": "Explain why the change was made, not only what changed." },
     { "text": "Add BREAKING CHANGE: in the footer when applicable." }
-  ]
+  ],
+  "chat.sessionSync.enabled": true
 }
