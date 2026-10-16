@@ -20,6 +20,11 @@ jobs:
     name: Verify Code
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      code-quality: write
+    outputs:
+      apps: ${{ steps.affected.outputs.apps }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -75,49 +80,44 @@ jobs:
           advanced-security: false
           annotations: true
           config: .github/zizmor.yml
-      - name: Lint, typecheck, test and build
+      - name: Lint, typecheck and build
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ "$EVENT_NAME" = "pull_request" ]; then
-            pnpm turbo run lint typecheck test build --affected
+            pnpm turbo run lint typecheck build --affected
           else
-            pnpm turbo run lint typecheck test build
+            pnpm turbo run lint typecheck build
           fi
-      - name: Generate coverage report
+      - name: Run test suite with coverage
         run: pnpm test:coverage
-      - name: Upload coverage artifact
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Upload code coverage
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: actions/upload-code-coverage@2b21a77928be8d5168c2b9581a67f2adbebacc52 # v1.4.4
         with:
-          name: coverage-report-typescript
-          path: coverage/cobertura-coverage.xml
-
-  upload-coverage-typescript:
-    name: Upload coverage (TypeScript)
-    needs: verify
-    if: ${{ !cancelled() && needs.verify.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read # Read workflow and repository metadata.
-      code-quality: write # Upload code coverage report.
-    steps:
-      - name: Download coverage artifact
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
-        with:
-          name: coverage-report-typescript
-      - uses: actions/upload-code-coverage@2b21a77928be8d5168c2b9581a67f2adbebacc52 # v1.4.4
-        with:
-          file: cobertura-coverage.xml
+          file: coverage/cobertura-coverage.xml
           language: TypeScript
           label: code-coverage-agent
+      - name: Detect affected apps
+        id: affected
+        run: |
+          AFFECTED=$(CI=1 pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')
+          echo "Discovered affected apps: $AFFECTED"
+          echo "apps=$AFFECTED" >> "$GITHUB_OUTPUT"
 
   image:
-    name: Verify image
-    if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name)
+    name: Verify image (${{ matrix.app }})
+    needs: verify
+    if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.verify.outputs.apps != '[]' && needs.verify.outputs.apps != ''
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        app: ${{ fromJson(needs.verify.outputs.apps) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -127,28 +127,40 @@ jobs:
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
+      - name: Resolve Dockerfile
+        id: dockerfile
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          if [ -f "apps/$APP/Dockerfile" ]; then
+            echo "file=apps/$APP/Dockerfile" >> "$GITHUB_OUTPUT"
+          else
+            echo "file=Dockerfile" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: Dockerfile
+          file: ${{ steps.dockerfile.outputs.file }}
           build-args: |
-            APP_NAME=helgefolelse
+            APP_NAME=${{ matrix.app }}
           load: true
-          tags: helgefolelse-web:ci
-          cache-from: type=gha,scope=helgefolelse-web
+          tags: ${{ matrix.app }}-web:ci
+          cache-from: type=gha,scope=${{ matrix.app }}-web
       - name: Smoke test image
+        env:
+          APP: ${{ matrix.app }}
         run: |
           docker run --detach --name web --publish 8080:8080 \
-            --env GIT_SHA="$GITHUB_SHA" helgefolelse-web:ci
-          if ! SHA="$GITHUB_SHA" SMOKE_URL=http://localhost:8080 node --test apps/helgefolelse/tests/smoke.mjs; then
+            --env GIT_SHA="$GITHUB_SHA" "${APP}-web:ci"
+          if ! SHA="$GITHUB_SHA" SMOKE_URL=http://localhost:8080 node --test "apps/$APP/tests/smoke.mjs"; then
             docker logs web
             exit 1
           fi
       - name: Scan image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: helgefolelse-web:ci
+          image-ref: ${{ matrix.app }}-web:ci
           format: table
           exit-code: "1"
           severity: HIGH,CRITICAL

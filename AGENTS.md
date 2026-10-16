@@ -23,7 +23,7 @@ Monorepo managed with **pnpm** workspaces and **Turborepo**, hosting independent
   - Use `pnpm` exclusively. Never introduce `package-lock.json` or `yarn.lock`.
   - Always link workspace packages using `workspace:*` (for example, `"@repo/typescript-config": "workspace:*"`).
   - Keep `pnpm-lock.yaml` synchronized when modifying dependency manifests.
-- **Decoupled Infrastructure**: Routine application deployments (`.github/workflows/cd.yml` -> `_cd-app.yml`) handle container rollouts, smoke verification, and traffic promotion. Infrastructure and IAM changes are managed strictly via dedicated infrastructure pipelines (`.github/workflows/infra.yml`).
+- **Decoupled Infrastructure**: Routine application deployments (`.github/workflows/cd.yml`) handle container rollouts, smoke verification, and traffic promotion. Infrastructure and IAM changes are managed strictly via dedicated infrastructure pipelines (`.github/workflows/infra.yml`).
 
 ## Commands (Repo Root)
 

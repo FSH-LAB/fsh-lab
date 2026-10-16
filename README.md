@@ -77,6 +77,6 @@ No manual `.tf` edits, per-app workflows, or operator pre-apply steps are requir
 ## Architecture & CI/CD
 
 - **CI (`.github/workflows/ci.yml`)**: Runs on pull requests and pushes to `main`. Leverages Turborepo affected filtering (`--affected`) and remote/workflow action caching to test changed packages and their dependents rapidly.
-- **CD (`.github/workflows/cd.yml` -> `_cd-app.yml` -> `.github/actions/cloud-run-rollout`)**: Dynamic matrix orchestrator detects affected apps under `apps/*`, builds minimal Distroless containers with BuildKit caching, scans with Trivy, attests provenance, and deploys to Google Cloud Run across `dev` and `production` (with manual rollbacks enabled via `rollback.yml`).
+- **CD (`.github/workflows/cd.yml` -> `.github/actions/cloud-run-rollout`)**: Dynamic stage-level matrix orchestrator detects affected apps under `apps/*`, builds minimal Distroless containers with BuildKit caching, scans with Trivy, attests provenance, and deploys to Google Cloud Run across `dev` and `production` (with manual rollbacks enabled via `rollback.yml`).
 - **Candidate Verification**: Deployments roll out to a tagged `--no-traffic` candidate revision first, run automated smoke tests against the candidate URL, and only promote traffic to 100% upon success.
 - **Infrastructure (`infra/`)**: Reusable Terraform modules (`infra/modules/cloud-run-app`) with auto-discovery of `apps/*/infra.json` manifests deployed via `.github/workflows/infra.yml`. Workload Identity Federation (WIF) eliminates long-lived service account keys.

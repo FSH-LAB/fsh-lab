@@ -91,10 +91,10 @@ runs:
           digest="$(docker buildx imagetools inspect "$image:$sha" --format '{{ .Manifest.Digest }}')"
         fi
         # Only images built and attested by CI on main are deployable.
-        # _cd-app.yml signs current builds. _deploy-app.yml, release-app.yml, and
+        # cd.yml signs current builds. _cd-app.yml, _deploy-app.yml, release-app.yml, and
         # ci-cd.yml signed historical releases; retain them to allow rollbacks to prior versions.
         verified=false
-        for signer in _cd-app.yml _deploy-app.yml release-app.yml ci-cd.yml; do
+        for signer in cd.yml _cd-app.yml _deploy-app.yml release-app.yml ci-cd.yml; do
           if gh attestation verify "oci://$image@$digest" --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/$signer" \
             --source-ref refs/heads/main --deny-self-hosted-runners; then
@@ -138,11 +138,8 @@ runs:
         PROJECT_ID: ${{ inputs.gcp_project_id }}
         APP: ${{ inputs.app }}
       run: |
-        command -v skopeo > /dev/null || { sudo apt-get update && sudo apt-get install --yes --no-install-recommends skopeo; }
         target="$REGION-docker.pkg.dev/$PROJECT_ID/$APP/web"
-        # --preserve-digests fails rather than rewriting manifests, so Cloud Run runs the attested digest.
-        skopeo copy --all --preserve-digests --authfile "$HOME/.docker/config.json" \
-          "docker://$IMAGE" "docker://$target:$SHA"
+        docker buildx imagetools create --tag "$target:$SHA" "$IMAGE"
         echo "image=$target@${IMAGE#*@}" >> "$GITHUB_OUTPUT"
 
     - name: Deploy candidate without traffic
@@ -155,30 +152,9 @@ runs:
         CLOUDSDK_CORE_PROJECT: ${{ inputs.gcp_project_id }}
         CLOUDSDK_RUN_REGION: ${{ inputs.region }}
         CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
-        APP: ${{ inputs.app }}
-        ENVIRONMENT: ${{ inputs.environment }}
       run: |
-        env_vars="GIT_SHA=$SHA"
-        manifest="apps/$APP/infra.json"
-        if [ -f "$manifest" ]; then
-          manifest_env=$(jq -r '.env // {} | to_entries[] | "\(.key)=\(.value)"' "$manifest" 2>/dev/null || true)
-          for item in $manifest_env; do
-            if [ -n "$item" ]; then
-              env_vars="$env_vars,$item"
-            fi
-          done
-        fi
-        if [ "$APP" = "status" ]; then
-          env_vars="$env_vars,GCP_PROJECT_ID=$CLOUDSDK_CORE_PROJECT"
-          if [ "$ENVIRONMENT" != "production" ]; then
-            helge_url="$(gcloud run services describe helgefolelse-web --format='value(status.url)' 2>/dev/null || true)"
-            if [ -n "$helge_url" ]; then
-              env_vars="$env_vars,HELGEFOLELSE_URL=$helge_url,HELGEFOLELSE_HEALTH_URL=$helge_url/api/health"
-            fi
-          fi
-        fi
         gcloud run deploy "$SERVICE" --image "$IMAGE" --no-traffic --tag candidate \
-          --update-env-vars "$env_vars"
+          --update-env-vars "GIT_SHA=$SHA"
         gcloud run services describe "$SERVICE" --format=json |
           jq -er '.status.traffic[] | select(.tag == "candidate") |
             "url=\(.url)\nrevision=\(.revisionName)"' >> "$GITHUB_OUTPUT"
