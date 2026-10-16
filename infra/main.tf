@@ -209,12 +209,11 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   # GCP caps provider display names at 32 characters.
   display_name = "FSH-LAB ${var.environment == "production" ? "prod" : var.environment} deployments"
   attribute_mapping = {
-    "google.subject"        = "assertion.sub"
-    "attribute.repository"  = "assertion.repository"
-    "attribute.ref"         = "assertion.ref"
-    "attribute.environment" = "assertion.environment"
-    # Reusable calls identify the executing workflow separately from the caller.
-    "attribute.workflow_ref" = "'job_workflow_ref' in assertion ? assertion.job_workflow_ref : assertion.workflow_ref"
+    "google.subject"             = "assertion.sub"
+    "attribute.repository"       = "assertion.repository"
+    "attribute.ref"              = "assertion.ref"
+    "attribute.environment"      = "assertion.environment"
+    "attribute.job_workflow_ref" = "has(assertion.job_workflow_ref) ? assertion.job_workflow_ref : assertion.workflow_ref"
   }
   attribute_condition = "assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/main' && assertion.environment == '${var.environment}'"
 
