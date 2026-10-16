@@ -213,7 +213,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.repository"       = "assertion.repository"
     "attribute.ref"              = "assertion.ref"
     "attribute.environment"      = "assertion.environment"
-    "attribute.job_workflow_ref" = "assertion.job_workflow_ref"
+    "attribute.job_workflow_ref" = "has(assertion.job_workflow_ref) ? assertion.job_workflow_ref : assertion.workflow_ref"
   }
   attribute_condition = "assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/main' && assertion.environment == '${var.environment}'"
 

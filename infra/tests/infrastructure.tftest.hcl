@@ -153,6 +153,11 @@ run "infra_identity_is_strictly_scoped" {
   }
 
   assert {
+    condition     = google_iam_workload_identity_pool_provider.github.attribute_mapping["attribute.job_workflow_ref"] == "has(assertion.job_workflow_ref) ? assertion.job_workflow_ref : assertion.workflow_ref"
+    error_message = "Deployment workflows without job_workflow_ref must map their workflow_ref claim."
+  }
+
+  assert {
     condition     = google_project_iam_member.infra_applier_service_account_admin.role == "roles/iam.serviceAccountAdmin" && can(regex("-runtime@", google_project_iam_member.infra_applier_service_account_admin.condition[0].expression))
     error_message = "Infra service account admin role must be strictly scoped to application runtime service accounts."
   }

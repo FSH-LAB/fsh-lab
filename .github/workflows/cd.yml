@@ -65,9 +65,38 @@ jobs:
             echo "apps=$AFFECTED" >> "$GITHUB_OUTPUT"
           fi
 
+  verify-ci:
+    name: Verify CI (${{ github.sha }})
+    needs: detect-apps
+    if: ${{ needs.detect-apps.outputs.apps != '[]' && needs.detect-apps.outputs.apps != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Require successful CI for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          runs="$(gh run list --repo "$GH_REPO" --workflow=ci.yml --commit="$COMMIT_SHA" \
+             --json databaseId,status,conclusion --limit 100)"
+          if jq -e 'any(.[]; .conclusion == "success")' <<< "$runs" > /dev/null; then
+             echo "CI has succeeded for $COMMIT_SHA."
+             exit 0
+          fi
+          run_id="$(jq -r '[.[] | select(.status == "in_progress" or .status == "queued")][0].databaseId // empty' <<< "$runs")"
+          if [ -z "$run_id" ]; then
+             echo "::error::No successful or active CI run found for $COMMIT_SHA"
+             exit 1
+          fi
+          gh run watch "$run_id" --repo "$GH_REPO" --exit-status
+
   publish:
     name: Publish image (${{ matrix.app }})
-    needs: detect-apps
+    needs: [detect-apps, verify-ci]
     if: ${{ needs.detect-apps.outputs.apps != '[]' && needs.detect-apps.outputs.apps != '' }}
     strategy:
       fail-fast: false
@@ -152,7 +181,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      actions: read # Await infrastructure provisioning workflow runs.
+      actions: read # Check infrastructure provisioning jobs.
       attestations: read # Verify image build provenance.
       contents: read
       packages: write # Move environment tag in GHCR.
@@ -173,14 +202,42 @@ jobs:
           GH_REPO: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          run_id="$(gh run list --workflow=infra.yml --commit="$COMMIT_SHA" --status=in_progress --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
-          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
-            run_id="$(gh run list --workflow=infra.yml --commit="$COMMIT_SHA" --status=queued --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
+          runs="$(gh run list --repo "$GH_REPO" --workflow=infra.yml --commit="$COMMIT_SHA" \
+            --json databaseId --limit 100)"
+          run_id="$(jq -r '.[0].databaseId // empty' <<< "$runs")"
+          if [ -z "$run_id" ]; then
+            echo "No infrastructure workflow run exists for $COMMIT_SHA."
+            exit 0
           fi
-          if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
-            echo "Waiting for active infrastructure workflow run $run_id..."
-            gh run watch "$run_id" --exit-status || { echo "::error::Infrastructure provisioning failed"; exit 1; }
-          fi
+          while true; do
+            jobs="$(gh api "repos/$GH_REPO/actions/runs/$run_id/jobs?per_page=100")"
+            job="$(jq -c '[.jobs[] | select(.name == "Apply dev")][0] // empty' <<< "$jobs")"
+            if [ -n "$job" ]; then
+              status="$(jq -r '.status' <<< "$job")"
+              conclusion="$(jq -r '.conclusion // empty' <<< "$job")"
+              if [ "$status" = "completed" ]; then
+                if [ "$conclusion" = "success" ]; then
+                  echo "Dev infrastructure provisioning succeeded."
+                  exit 0
+                fi
+                if [ "$conclusion" = "skipped" ] &&
+                  jq -e 'any(.jobs[]; .name == "Verify Infrastructure" and .conclusion == "success")' <<< "$jobs" > /dev/null; then
+                  echo "Dev infrastructure was not requested for this run."
+                  exit 0
+                fi
+                echo "::error::Dev infrastructure provisioning concluded $conclusion"
+                exit 1
+              fi
+            else
+              run_status="$(gh run view "$run_id" --repo "$GH_REPO" --json status --jq .status)"
+              if [ "$run_status" = "completed" ]; then
+                echo "::error::Infrastructure run completed without an Apply dev job"
+                exit 1
+              fi
+            fi
+            echo "Waiting for Apply dev in infrastructure workflow run $run_id..."
+            sleep 15
+          done
       - uses: ./.github/actions/cloud-run-rollout # zizmor: ignore[self-repository]
         id: rollout
         with:
@@ -202,6 +259,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
+      actions: read # Check infrastructure provisioning jobs.
       attestations: read # Verify image build provenance.
       contents: write # Create GitHub releases.
       packages: write # Move environment tag in GHCR.
@@ -216,6 +274,43 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Await infrastructure provisioning (production)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          runs="$(gh run list --repo "$GH_REPO" --workflow=infra.yml --commit="$COMMIT_SHA" \
+            --json databaseId --limit 100)"
+          run_id="$(jq -r '.[0].databaseId // empty' <<< "$runs")"
+          if [ -z "$run_id" ]; then
+            echo "No infrastructure workflow run exists for $COMMIT_SHA."
+            exit 0
+          fi
+          while true; do
+            jobs="$(gh api "repos/$GH_REPO/actions/runs/$run_id/jobs?per_page=100")"
+            job="$(jq -c '[.jobs[] | select(.name == "Apply production")][0] // empty' <<< "$jobs")"
+            if [ -n "$job" ]; then
+              status="$(jq -r '.status' <<< "$job")"
+              conclusion="$(jq -r '.conclusion // empty' <<< "$job")"
+              if [ "$status" = "completed" ]; then
+                if [ "$conclusion" = "success" ]; then
+                  echo "Production infrastructure provisioning succeeded."
+                  exit 0
+                fi
+                echo "::error::Production infrastructure provisioning concluded $conclusion"
+                exit 1
+              fi
+            else
+              run_status="$(gh run view "$run_id" --repo "$GH_REPO" --json status --jq .status)"
+              if [ "$run_status" = "completed" ]; then
+                echo "::error::Infrastructure run completed without an Apply production job"
+                exit 1
+              fi
+            fi
+            echo "Waiting for Apply production in infrastructure workflow run $run_id..."
+            sleep 15
+          done
       - uses: ./.github/actions/cloud-run-rollout # zizmor: ignore[self-repository]
         id: rollout
         with:
