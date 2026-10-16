@@ -53,7 +53,7 @@ locals {
   }
 
   # Only the infra.yml workflow on main may impersonate the infra applier.
-  infra_applier_principal_attribute = "attribute.job_workflow_ref/${var.github_repository}/.github/workflows/infra.yml@refs/heads/main"
+  infra_applier_principal_attribute = "attribute.workflow_ref/${var.github_repository}/.github/workflows/infra.yml@refs/heads/main"
 }
 
 # ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.repository"       = "assertion.repository"
     "attribute.ref"              = "assertion.ref"
     "attribute.environment"      = "assertion.environment"
-    "attribute.job_workflow_ref" = "assertion.job_workflow_ref"
+    "attribute.workflow_ref"     = "assertion.workflow_ref"
   }
   attribute_condition = "assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/main' && assertion.environment == '${var.environment}'"
 
