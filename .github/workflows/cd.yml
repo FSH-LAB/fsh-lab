@@ -20,11 +20,6 @@ on:
 permissions:
   contents: read
 
-# Serialize per app so an older commit can never be promoted after a newer one.
-concurrency:
-  group: cd-${{ inputs.app }}
-  cancel-in-progress: false
-
 jobs:
   publish:
     name: Publish image
