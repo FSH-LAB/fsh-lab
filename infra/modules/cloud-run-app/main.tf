@@ -96,6 +96,7 @@ resource "google_cloud_run_v2_service" "this" {
       template[0].containers[0].image,
       template[0].containers[0].env,
       template[0].containers[0].name,
+      template[0].containers[0].resources,
       template[0].revision,
       traffic,
       client,
