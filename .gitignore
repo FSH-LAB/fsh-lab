@@ -19,3 +19,4 @@ playwright-report/
 infra/imports.tf
 infra/backend_override.tf
 coverage/
+graphify-out/

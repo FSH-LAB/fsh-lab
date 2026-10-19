@@ -165,7 +165,7 @@ jobs:
   infra-dev:
     name: Infra (dev)
     needs: [code, ci]
-    if: github.event_name == 'push' && needs.code.outputs.infra == 'true'
+    if: ${{ always() && !cancelled() && !failure() && needs.ci.result == 'success' && github.event_name == 'push' && needs.code.outputs.infra == 'true' }}
     uses: ./.github/workflows/infra.yml
     with:
       environment: dev
@@ -175,7 +175,8 @@ jobs:
 
   infra-production:
     name: Infra (production)
-    needs: infra-dev
+    needs: [code, infra-dev]
+    if: ${{ always() && !cancelled() && !failure() && needs.infra-dev.result == 'success' && github.event_name == 'push' && needs.code.outputs.infra == 'true' }}
     uses: ./.github/workflows/infra.yml
     with:
       environment: production
@@ -185,8 +186,8 @@ jobs:
 
   deploy:
     name: Deliver (${{ matrix.app }})
-    needs: [code, ci, infra-production]
-    if: ${{ !cancelled() && !failure() && github.event_name == 'push' && needs.code.outputs.apps != '[]' }}
+    needs: [code, ci, infra-dev, infra-production]
+    if: ${{ always() && !cancelled() && !failure() && needs.ci.result == 'success' && (needs.code.outputs.infra != 'true' || needs.infra-production.result == 'success') && github.event_name == 'push' && needs.code.outputs.apps != '[]' }}
     strategy:
       fail-fast: false
       matrix:
