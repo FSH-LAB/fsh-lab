@@ -176,7 +176,7 @@ jobs:
   infra-production:
     name: Infra (production)
     needs: [code, infra-dev]
-    if: github.event_name == 'push' && needs.code.outputs.infra == 'true'
+    if: ${{ always() && !cancelled() && !failure() && needs.infra-dev.result == 'success' && github.event_name == 'push' && needs.code.outputs.infra == 'true' }}
     uses: ./.github/workflows/infra.yml
     with:
       environment: production
