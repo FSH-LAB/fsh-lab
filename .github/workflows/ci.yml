@@ -44,10 +44,10 @@ jobs:
         with:
           install: "true"
       - run: pnpm format:check
-      - name: Lint, typecheck and build
+      - name: Lint, typecheck, test and build
         run: |
           [ "$GITHUB_EVENT_NAME" = pull_request ] && set -- --affected
-          pnpm turbo run lint typecheck build "$@"
+          pnpm turbo run lint typecheck test build "$@"
       - run: pnpm test:coverage
       - name: Upload code coverage
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository

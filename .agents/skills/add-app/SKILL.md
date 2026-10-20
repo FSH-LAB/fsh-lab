@@ -72,6 +72,7 @@ When adding a new application `apps/<app>`, create the following directory struc
 apps/<app>/
 ├── infra.json               # Required: Infrastructure metadata for Terraform discovery
 ├── package.json             # Required: Monorepo workspace package & Turborepo task hooks
+├── vitest.config.mts        # Required for TypeScript/Vitest apps (auto-discovered for coverage)
 ├── tests/
 │   └── smoke.mjs            # Required: Candidate revision smoke test for CD pipeline
 ├── src/                     # Application source files
@@ -102,6 +103,8 @@ Field reference:
 - `memory` (string, optional, default: `"512Mi"`): Cloud Run memory limit.
 - `minInstances` (number, optional, default: `0`): Minimum warm instances.
 - `maxInstances` (number, optional, default: `2`): Maximum instance scaling cap.
+- `env` (`Record<string, string>`, optional): Non-secret environment variables injected into the container across all environments (`GCP_PROJECT_ID` and `GIT_SHA` are injected automatically).
+- `environments` (`{ dev?: { env?: Record<string, string> }, production?: { env?: Record<string, string> } }`, optional): Per-environment `env` overrides merged on top of `env`.
 
 ### 3.2 `package.json`
 

@@ -9,6 +9,12 @@ export const MEMORY_REGEX = /^\d+(Mi|Gi)$/;
 export const DURATION_REGEX = /^\d+s$/;
 export const APP_SLUG_REGEX = /^[a-z][a-z0-9-]{1,20}[a-z0-9]$/;
 
+const envMapSchema = z.record(z.string(), z.string());
+
+const environmentOverrideSchema = z.object({
+  env: envMapSchema.optional(),
+});
+
 /**
  * Zod schema defining the contract for apps/<app>/infra.json files.
  * Auto-discovered by Terraform in infra/main.tf.
@@ -41,7 +47,13 @@ export const infraSchema = z
       .int("maxInstances must be an integer")
       .min(1, "maxInstances must be at least 1")
       .optional(),
-    env: z.record(z.string(), z.string()).optional(),
+    env: envMapSchema.optional(),
+    environments: z
+      .object({
+        dev: environmentOverrideSchema.optional(),
+        production: environmentOverrideSchema.optional(),
+      })
+      .optional(),
     healthPath: z
       .string()
       .startsWith("/", "healthPath must start with leading slash '/'")

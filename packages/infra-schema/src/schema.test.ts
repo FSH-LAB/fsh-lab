@@ -25,6 +25,9 @@ describe("infraSchema validation", () => {
       minInstances: 0,
       maxInstances: 3,
       env: { KEY: "value" },
+      environments: {
+        dev: { env: { KEY: "dev-value" } },
+      },
       healthPath: "/api/health",
       uptimePeriod: "60s",
       uptimeTimeout: "10s",

@@ -16,7 +16,7 @@ outputs:
     value: ${{ steps.resolve.outputs.image }}
   digest:
     description: "Pushed image digest (only when push is true)"
-    value: ${{ steps.build.outputs.digest }}
+    value: ${{ steps.push.outputs.digest }}
 
 runs:
   using: composite
@@ -34,22 +34,18 @@ runs:
     - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
     - name: Build image
-      id: build
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
       with:
         context: .
         file: ${{ steps.resolve.outputs.dockerfile }}
         build-args: APP_NAME=${{ inputs.app }}
-        push: ${{ inputs.push == 'true' }}
-        load: ${{ inputs.push != 'true' }}
+        push: false
+        load: true
         tags: ${{ steps.resolve.outputs.image }}:${{ github.sha }}
         labels: |
           org.opencontainers.image.source=https://github.com/${{ github.repository }}
           org.opencontainers.image.revision=${{ github.sha }}
         cache-from: type=gha,scope=${{ inputs.app }}-web
-        cache-to: ${{ inputs.push == 'true' && format('type=gha,mode=max,scope={0}-web', inputs.app) || '' }}
-        sbom: ${{ inputs.push == 'true' }}
-        provenance: ${{ inputs.push == 'true' && 'mode=max' || 'false' }}
 
     - name: Scan image
       uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -59,3 +55,21 @@ runs:
         exit-code: "1"
         severity: HIGH,CRITICAL
         ignore-unfixed: true
+
+    - name: Push image
+      id: push
+      if: inputs.push == 'true'
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: ${{ steps.resolve.outputs.dockerfile }}
+        build-args: APP_NAME=${{ inputs.app }}
+        push: true
+        tags: ${{ steps.resolve.outputs.image }}:${{ github.sha }}
+        labels: |
+          org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+        cache-from: type=gha,scope=${{ inputs.app }}-web
+        cache-to: type=gha,mode=max,scope=${{ inputs.app }}-web
+        sbom: true
+        provenance: mode=max
