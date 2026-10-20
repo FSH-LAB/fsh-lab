@@ -74,7 +74,7 @@ jobs:
           base="${base:-${BEFORE:-HEAD^}}"
           [[ "$base" =~ ^0+$ ]] && base="HEAD^"
           apps="$(pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')"
-          if ! git diff --quiet "$base" HEAD -- Dockerfile .dockerignore .github/actions/build-image; then
+          if ! git diff --quiet "$base"...HEAD -- Dockerfile .dockerignore .github/actions/build-image; then
             for dir in apps/*/; do
               app="${dir#apps/}"
               app="${app%/}"
@@ -82,7 +82,7 @@ jobs:
             done
           fi
           echo "apps=$apps" >> "$GITHUB_OUTPUT"
-          if git diff --quiet "$base" HEAD -- infra 'apps/*/infra.json' .github/workflows/infra.yml; then
+          if git diff --quiet "$base"...HEAD -- infra 'apps/*/infra.json' .github/workflows/infra.yml; then
             echo "infra=false" >> "$GITHUB_OUTPUT"
           else
             echo "infra=true" >> "$GITHUB_OUTPUT"
