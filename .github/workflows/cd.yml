@@ -10,24 +10,35 @@ on:
       app:
         required: true
         type: string
+      environment:
+        required: false
+        type: string
+        default: all
   workflow_dispatch:
     inputs:
       app:
         description: Application to build and deploy from main
         required: true
         type: string
+      environment:
+        description: Target environment stage to execute
+        required: false
+        type: choice
+        options: [all, dev, production]
+        default: all
 
 permissions:
   contents: read
 
-# Serialize per app so an older commit can never be promoted after a newer one.
+# Serialize per app and stage so an older commit can never be promoted after a newer one.
 concurrency:
-  group: cd-${{ inputs.app }}
+  group: cd-${{ inputs.app }}-${{ inputs.environment }}
   cancel-in-progress: false
 
 jobs:
   publish:
     name: Publish image
+    if: inputs.environment != 'production'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -59,12 +70,13 @@ jobs:
   deploy-dev:
     name: Deploy dev
     needs: publish
+    if: inputs.environment != 'production'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       attestations: read # Verify image build provenance.
       contents: read
-      packages: write # Move environment tag in GHCR.
+      packages: read # Pull container image from GHCR.
       id-token: write # Authenticate to GCP using Workload Identity Federation.
     environment:
       name: dev
@@ -90,12 +102,13 @@ jobs:
   deploy-production:
     name: Deploy production
     needs: [publish, deploy-dev]
+    if: ${{ always() && !cancelled() && !failure() && inputs.environment != 'dev' && (inputs.environment == 'production' || needs.deploy-dev.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       attestations: read # Verify image build provenance.
       contents: write # Create GitHub releases.
-      packages: write # Move environment tag in GHCR.
+      packages: read # Pull container image from GHCR.
       id-token: write # Authenticate to GCP using Workload Identity Federation.
     environment:
       name: production
@@ -113,7 +126,7 @@ jobs:
           app: ${{ inputs.app }}
           environment: production
           release: ${{ github.sha }}
-          digest: ${{ needs.publish.outputs.digest }}
+          digest: ${{ needs.publish.outputs.digest || '' }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
           gcp_wif_provider: ${{ vars.GCP_WIF_PROVIDER }}
           gcp_deploy_service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}

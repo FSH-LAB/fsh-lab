@@ -8,6 +8,7 @@ export const CPU_REGEX = /^(\d+(\.\d+)?|\d+m)$/;
 export const MEMORY_REGEX = /^\d+(Mi|Gi)$/;
 export const DURATION_REGEX = /^\d+s$/;
 export const APP_SLUG_REGEX = /^[a-z][a-z0-9-]{1,20}[a-z0-9]$/;
+export const SECRET_NAME_REGEX = /^[A-Z][A-Z0-9_]*$/;
 
 const envMapSchema = z.record(z.string(), z.string());
 
@@ -54,6 +55,17 @@ export const infraSchema = z
         production: environmentOverrideSchema.optional(),
       })
       .optional(),
+    secrets: z
+      .array(
+        z
+          .string()
+          .regex(
+            SECRET_NAME_REGEX,
+            "secret names must be uppercase environment variable identifiers (e.g., 'API_KEY')",
+          ),
+      )
+      .optional(),
+    uptimeCheck: z.boolean().optional(),
     healthPath: z
       .string()
       .startsWith("/", "healthPath must start with leading slash '/'")

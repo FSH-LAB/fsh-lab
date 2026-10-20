@@ -62,3 +62,9 @@ variable "is_public" {
   type        = bool
   default     = true
 }
+
+variable "secrets" {
+  description = "Secret environment variable names provisioned in Secret Manager and mounted into the container."
+  type        = set(string)
+  default     = []
+}

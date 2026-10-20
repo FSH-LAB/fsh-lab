@@ -44,6 +44,12 @@ run "app_module_protects_service" {
     display_name   = "Example"
     region         = "europe-north2"
     deployer_email = "deployer@test-project.iam.gserviceaccount.com"
+    secrets        = ["API_KEY"]
+  }
+
+  assert {
+    condition     = google_secret_manager_secret.this["API_KEY"].secret_id == "example-app-api-key" && google_secret_manager_secret_iam_member.runtime_accessor["API_KEY"].role == "roles/secretmanager.secretAccessor"
+    error_message = "Declared secrets must be created in Secret Manager with <app>-<key> naming and granted to the runtime service account."
   }
 
   assert {

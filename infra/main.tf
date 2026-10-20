@@ -10,6 +10,7 @@ locals {
     "logging.googleapis.com",
     "monitoring.googleapis.com",
     "run.googleapis.com",
+    "secretmanager.googleapis.com",
     "storage.googleapis.com",
     "sts.googleapis.com",
   ])
@@ -38,6 +39,7 @@ locals {
     "roles/logging.configWriter",
     "roles/monitoring.admin",
     "roles/run.admin",
+    "roles/secretmanager.admin",
     "roles/serviceusage.serviceUsageAdmin",
     "roles/iam.serviceAccountCreator",
     "roles/iam.serviceAccountDeleter",
@@ -253,6 +255,7 @@ module "cloud_run_apps" {
     try(each.value.env, {}),
     try(each.value.environments[var.environment].env, {}),
   )
+  secrets   = toset(try(each.value.secrets, []))
   is_public = try(each.value.public, true)
 
   project_id     = google_project.environment.project_id
@@ -280,7 +283,7 @@ module "uptime_monitoring" {
       path         = try(local.apps[app].healthPath, "/api/health")
       period       = try(local.apps[app].uptimePeriod, "60s")
       timeout      = try(local.apps[app].uptimeTimeout, "10s")
-    }
+    } if try(local.apps[app].public, true) && try(local.apps[app].uptimeCheck, true)
   }
 
   status_runtime_service_account_email = module.cloud_run_apps["status"].runtime_service_account

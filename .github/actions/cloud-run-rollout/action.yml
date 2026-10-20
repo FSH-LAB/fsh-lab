@@ -156,9 +156,12 @@ runs:
         ENVIRONMENT: ${{ inputs.environment }}
       run: |
         manifest_env='{}'
+        secrets_flag=(--clear-secrets)
         manifest="apps/$APP/infra.json"
         if [ -f "$manifest" ]; then
           manifest_env="$(jq -c --arg env "$ENVIRONMENT" '((.env // {}) + (.environments[$env].env // {})) | del(.GIT_SHA, .GCP_PROJECT_ID)' "$manifest")"
+          secrets_spec="$(jq -r --arg app "$APP" '(.secrets // []) | map("\(.)=\($app)-\(ascii_downcase | gsub("_"; "-")):latest") | join(",")' "$manifest")"
+          [ -n "$secrets_spec" ] && secrets_flag=(--set-secrets "$secrets_spec")
         fi
         jq -n \
           --argjson manifest_env "$manifest_env" \
@@ -166,7 +169,7 @@ runs:
           --arg sha "$SHA" \
           '($manifest_env + {GCP_PROJECT_ID: $project, GIT_SHA: $sha})' > "$RUNNER_TEMP/env-vars.yaml"
         gcloud run deploy "$SERVICE" --image "$IMAGE" --no-traffic --tag candidate \
-          --env-vars-file "$RUNNER_TEMP/env-vars.yaml"
+          --env-vars-file "$RUNNER_TEMP/env-vars.yaml" "${secrets_flag[@]}"
         gcloud run services describe "$SERVICE" --format=json |
           jq -er '.status.traffic[] | select(.tag == "candidate") |
             "url=\(.url)\nrevision=\(.revisionName)"' >> "$GITHUB_OUTPUT"
@@ -195,10 +198,3 @@ runs:
       run: |
         gcloud run services update-traffic "$SERVICE" --to-revisions "$REVISION=100"
         echo "url=$(gcloud run services describe "$SERVICE" --format='value(status.url)')" >> "$GITHUB_OUTPUT"
-
-    - name: Tag image with environment
-      shell: bash
-      env:
-        IMAGE: ${{ steps.release.outputs.image }}
-        ENVIRONMENT: ${{ inputs.environment }}
-      run: docker buildx imagetools create --tag "${IMAGE%@*}:$ENVIRONMENT" "$IMAGE"

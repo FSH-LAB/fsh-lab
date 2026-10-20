@@ -34,7 +34,7 @@ jobs:
     permissions:
       attestations: read # Verify image provenance.
       contents: read # Check out smoke tests.
-      packages: write # Pull the image and update its environment tag.
+      packages: read # Pull container image from GHCR.
       id-token: write # Authenticate to GCP using Workload Identity Federation.
     environment:
       name: ${{ inputs.environment }}

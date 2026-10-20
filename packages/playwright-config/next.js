@@ -18,7 +18,7 @@ export function defineNextPlaywrightConfig(options) {
   const defaultWebServer = process.env.PLAYWRIGHT_TEST_BASE_URL
     ? undefined
     : {
-        command: `cp -R .next/static .next/standalone/apps/${appName}/.next/static && PORT=${port} node .next/standalone/apps/${appName}/server.js`,
+        command: `mkdir -p .next/standalone/apps/${appName}/.next/static && cp -R .next/static/. .next/standalone/apps/${appName}/.next/static/ && if [ -d public ]; then mkdir -p .next/standalone/apps/${appName}/public && cp -R public/. .next/standalone/apps/${appName}/public/; fi && PORT=${port} node .next/standalone/apps/${appName}/server.js`,
         url: baseUrl,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

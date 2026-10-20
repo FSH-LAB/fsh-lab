@@ -9,7 +9,7 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "lint:workflows": "actionlint .github/workflows/*.yml",
+    "lint:workflows": "actionlint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:coverage": "vitest run --coverage",

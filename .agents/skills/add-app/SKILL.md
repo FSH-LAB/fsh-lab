@@ -105,6 +105,8 @@ Field reference:
 - `maxInstances` (number, optional, default: `2`): Maximum instance scaling cap.
 - `env` (`Record<string, string>`, optional): Non-secret environment variables injected into the container across all environments (`GCP_PROJECT_ID` and `GIT_SHA` are injected automatically).
 - `environments` (`{ dev?: { env?: Record<string, string> }, production?: { env?: Record<string, string> } }`, optional): Per-environment `env` overrides merged on top of `env`.
+- `secrets` (`string[]`, optional): Secret environment variable names (e.g., `["OPENAI_API_KEY"]`). Terraform provisions `<app>-<lower-hyphenated-key>` in GCP Secret Manager and grants `<app>-runtime` access; CD mounts `:latest` into the container.
+- `uptimeCheck` (`boolean`, optional, default: `true` when `public: true`): Set to `false` for experimental/scale-to-zero apps so 60s Cloud Monitoring probes do not keep instances warm.
 
 ### 3.2 `package.json`
 
