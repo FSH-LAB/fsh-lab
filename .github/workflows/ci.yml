@@ -48,6 +48,12 @@ jobs:
         run: |
           [ "$GITHUB_EVENT_NAME" = pull_request ] && set -- --affected
           pnpm turbo run lint typecheck test build "$@"
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run end-to-end tests
+        run: |
+          [ "$GITHUB_EVENT_NAME" = pull_request ] && set -- --affected
+          pnpm turbo run test:e2e "$@"
       - run: pnpm test:coverage
       - name: Upload code coverage
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -60,9 +66,21 @@ jobs:
         id: changes
         env:
           BEFORE: ${{ github.event.before }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          echo "apps=$(pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')" >> "$GITHUB_OUTPUT"
-          if git diff --quiet "${BEFORE:-HEAD^}" HEAD -- infra 'apps/*/infra.json' .github/workflows/infra.yml; then
+          base="${BASE_REF:+origin/$BASE_REF}"
+          base="${base:-${BEFORE:-HEAD^}}"
+          [[ "$base" =~ ^0+$ ]] && base="HEAD^"
+          apps="$(pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')"
+          if ! git diff --quiet "$base" HEAD -- Dockerfile .dockerignore .github/actions/build-image; then
+            for dir in apps/*/; do
+              app="${dir#apps/}"
+              app="${app%/}"
+              [ -f "${dir}Dockerfile" ] || apps="$(jq -cn --argjson a "$apps" --arg app "$app" '$a + [$app] | unique')"
+            done
+          fi
+          echo "apps=$apps" >> "$GITHUB_OUTPUT"
+          if git diff --quiet "$base" HEAD -- infra 'apps/*/infra.json' .github/workflows/infra.yml; then
             echo "infra=false" >> "$GITHUB_OUTPUT"
           else
             echo "infra=true" >> "$GITHUB_OUTPUT"

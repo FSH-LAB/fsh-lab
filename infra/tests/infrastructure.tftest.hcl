@@ -110,6 +110,11 @@ run "discovers_applications" {
     condition     = contains(keys(module.cloud_run_apps), "helgefolelse") && contains(keys(module.cloud_run_apps), "status")
     error_message = "Cloud Run app modules must be instantiated for each discovered application."
   }
+
+  assert {
+    condition     = local.apps["status"].environments["dev"].env["HELGEFOLELSE_URL"] == "https://helgefolelse-web-475851250732.europe-north2.run.app"
+    error_message = "Manifest environment overrides must be decoded from apps/*/infra.json."
+  }
 }
 
 run "trust_is_scoped_to_environment" {

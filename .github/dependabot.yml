@@ -26,12 +26,27 @@ updates:
           - "*"
 
   - package-ecosystem: docker
-    directory: /
+    directories:
+      - "/"
+      - "/apps/*"
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
     groups:
       docker-images:
+        patterns:
+          - "*"
+
+  - package-ecosystem: terraform
+    directories:
+      - "/infra"
+      - "/infra/github"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      terraform-providers:
         patterns:
           - "*"

@@ -45,7 +45,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_INFRA_SERVICE_ACCOUNT || vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Terraform apply
+      - name: Terraform plan and apply
         env:
           ENVIRONMENT: ${{ inputs.environment }}
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -53,5 +53,14 @@ jobs:
           terraform -chdir=infra init -input=false -lockfile=readonly \
             -backend-config="bucket=$PROJECT_ID-terraform-state" \
             -backend-config="prefix=helgefolelse/$ENVIRONMENT"
+          terraform -chdir=infra plan -input=false -lock-timeout=5m \
+            -var-file="environments/$ENVIRONMENT.tfvars" \
+            -out="$RUNNER_TEMP/tfplan"
+          {
+            echo "### Terraform Plan (\`$ENVIRONMENT\`)"
+            echo '```terraform'
+            terraform -chdir=infra show -no-color "$RUNNER_TEMP/tfplan"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           terraform -chdir=infra apply -input=false -auto-approve -lock-timeout=5m \
-            -var-file="environments/$ENVIRONMENT.tfvars"
+            "$RUNNER_TEMP/tfplan"
