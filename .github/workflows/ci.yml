@@ -210,7 +210,7 @@ jobs:
       environment: dev
     permissions:
       attestations: write # Sign build provenance.
-      contents: read
+      contents: write # Required by cd.yml workflow_call permission ceiling.
       id-token: write # Authenticate to GCP and sign provenance.
       packages: write # Publish container images to GHCR.
 
@@ -252,7 +252,7 @@ jobs:
       app: ${{ matrix.app }}
       environment: production
     permissions:
-      attestations: read # Verify image build provenance.
+      attestations: write # Required by cd.yml workflow_call permission ceiling.
       contents: write # Create GitHub releases.
       id-token: write # Authenticate to GCP using Workload Identity Federation.
-      packages: read # Pull container image from GHCR.
+      packages: write # Required by cd.yml workflow_call permission ceiling.
