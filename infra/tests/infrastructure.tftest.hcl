@@ -44,6 +44,12 @@ run "app_module_protects_service" {
     display_name   = "Example"
     region         = "europe-north2"
     deployer_email = "deployer@test-project.iam.gserviceaccount.com"
+    secrets        = ["API_KEY"]
+  }
+
+  assert {
+    condition     = google_secret_manager_secret.this["API_KEY"].secret_id == "example-app-api-key" && google_secret_manager_secret_iam_member.runtime_accessor["API_KEY"].role == "roles/secretmanager.secretAccessor"
+    error_message = "Declared secrets must be created in Secret Manager with <app>-<key> naming and granted to the runtime service account."
   }
 
   assert {
@@ -109,6 +115,11 @@ run "discovers_applications" {
   assert {
     condition     = contains(keys(module.cloud_run_apps), "helgefolelse") && contains(keys(module.cloud_run_apps), "status")
     error_message = "Cloud Run app modules must be instantiated for each discovered application."
+  }
+
+  assert {
+    condition     = local.apps["status"].environments["dev"].env["HELGEFOLELSE_URL"] == "https://helgefolelse-web-475851250732.europe-north2.run.app"
+    error_message = "Manifest environment overrides must be decoded from apps/*/infra.json."
   }
 }
 

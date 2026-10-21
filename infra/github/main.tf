@@ -51,13 +51,6 @@ resource "github_repository_environment" "env" {
   repository  = local.repository
   environment = each.key
 
-  dynamic "reviewers" {
-    for_each = each.key == "dev" ? [] : [1]
-    content {
-      users = local.reviewers
-    }
-  }
-
   deployment_branch_policy {
     protected_branches     = false
     custom_branch_policies = true
@@ -69,6 +62,26 @@ resource "github_repository_environment_deployment_policy" "main" {
 
   repository     = local.repository
   environment    = github_repository_environment.env[each.key].environment
+  branch_pattern = "main"
+}
+
+resource "github_repository_environment" "production_approval" {
+  repository  = local.repository
+  environment = "production-approval"
+
+  reviewers {
+    users = local.reviewers
+  }
+
+  deployment_branch_policy {
+    protected_branches     = false
+    custom_branch_policies = true
+  }
+}
+
+resource "github_repository_environment_deployment_policy" "production_approval_main" {
+  repository     = local.repository
+  environment    = github_repository_environment.production_approval.environment
   branch_pattern = "main"
 }
 

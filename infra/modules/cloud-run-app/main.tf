@@ -96,6 +96,8 @@ resource "google_cloud_run_v2_service" "this" {
       template[0].containers[0].image,
       template[0].containers[0].env,
       template[0].containers[0].name,
+      template[0].containers[0].resources[0].cpu_idle,
+      template[0].containers[0].resources[0].startup_cpu_boost,
       template[0].revision,
       traffic,
       client,
@@ -108,4 +110,28 @@ resource "google_service_account_iam_member" "deployer_acts_as_runtime" {
   service_account_id = google_service_account.runtime.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${var.deployer_email}"
+}
+
+resource "google_secret_manager_secret" "this" {
+  for_each = var.secrets
+
+  project   = var.project_id
+  secret_id = "${var.app}-${replace(lower(each.value), "_", "-")}"
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "runtime_accessor" {
+  for_each = var.secrets
+
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.this[each.key].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.runtime.email}"
 }

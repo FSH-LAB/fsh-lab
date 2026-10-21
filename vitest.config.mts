@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    projects: ["apps/helgefolelse", "apps/status", "packages/infra-schema"],
+    projects: ["apps/*/vitest.config.mts", "packages/*/vitest.config.mts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "cobertura"],

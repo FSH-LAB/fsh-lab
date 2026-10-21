@@ -25,6 +25,11 @@ describe("infraSchema validation", () => {
       minInstances: 0,
       maxInstances: 3,
       env: { KEY: "value" },
+      environments: {
+        dev: { env: { KEY: "dev-value" } },
+      },
+      secrets: ["OPENAI_API_KEY", "DATABASE_URL"],
+      uptimeCheck: false,
       healthPath: "/api/health",
       uptimePeriod: "60s",
       uptimeTimeout: "10s",
@@ -65,6 +70,15 @@ describe("infraSchema validation", () => {
         minInstances: -1,
       }),
     ).toThrow();
+  });
+
+  it("rejects invalid secret names", () => {
+    expect(() =>
+      validateInfraManifest({
+        displayName: "Test",
+        secrets: ["lowercase_secret"],
+      }),
+    ).toThrow(/secret names must be uppercase/);
   });
 });
 

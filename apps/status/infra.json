@@ -9,5 +9,13 @@
     "BIGQUERY_DATASET": "uptime_monitoring",
     "HELGEFOLELSE_HEALTH_URL": "https://helgefolelse.no/api/health",
     "HELGEFOLELSE_URL": "https://helgefolelse.no"
+  },
+  "environments": {
+    "dev": {
+      "env": {
+        "HELGEFOLELSE_HEALTH_URL": "https://helgefolelse-web-475851250732.europe-north2.run.app/api/health",
+        "HELGEFOLELSE_URL": "https://helgefolelse-web-475851250732.europe-north2.run.app"
+      }
+    }
   }
 }

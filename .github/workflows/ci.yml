@@ -44,10 +44,18 @@ jobs:
         with:
           install: "true"
       - run: pnpm format:check
-      - name: Lint, typecheck and build
+      - name: Lint, typecheck, test and build
         run: |
-          [ "$GITHUB_EVENT_NAME" = pull_request ] && set -- --affected
-          pnpm turbo run lint typecheck build "$@"
+          [ "$GITHUB_EVENT_NAME" = pull_request ] && export TURBO_SCM_BASE="origin/$GITHUB_BASE_REF" && set -- --affected
+          pnpm turbo run lint typecheck test build "$@"
+      - name: Run end-to-end tests
+        if: github.event_name != 'push'
+        run: |
+          [ "$GITHUB_EVENT_NAME" = pull_request ] && export TURBO_SCM_BASE="origin/$GITHUB_BASE_REF" && set -- --affected
+          if [ "$(pnpm turbo run test:e2e "$@" --dry=json | jq '.tasks | length')" -gt 0 ]; then
+            pnpm exec playwright install --with-deps chromium
+            pnpm turbo run test:e2e "$@"
+          fi
       - run: pnpm test:coverage
       - name: Upload code coverage
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -60,9 +68,22 @@ jobs:
         id: changes
         env:
           BEFORE: ${{ github.event.before }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          echo "apps=$(pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')" >> "$GITHUB_OUTPUT"
-          if git diff --quiet "${BEFORE:-HEAD^}" HEAD -- infra 'apps/*/infra.json' .github/workflows/infra.yml; then
+          base="${BASE_REF:+origin/$BASE_REF}"
+          base="${base:-${BEFORE:-HEAD^}}"
+          [[ "$base" =~ ^0+$ ]] && base="HEAD^"
+          export TURBO_SCM_BASE="$base"
+          apps="$(pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')"
+          if ! git diff --quiet "$base"...HEAD -- Dockerfile .dockerignore .github/actions/build-image; then
+            for dir in apps/*/; do
+              app="${dir#apps/}"
+              app="${app%/}"
+              [ -f "${dir}Dockerfile" ] || apps="$(jq -cn --argjson a "$apps" --arg app "$app" '$a + [$app] | unique')"
+            done
+          fi
+          echo "apps=$apps" >> "$GITHUB_OUTPUT"
+          if git diff --quiet "$base"...HEAD -- infra 'apps/*/infra.json' .github/workflows/infra.yml; then
             echo "infra=false" >> "$GITHUB_OUTPUT"
           else
             echo "infra=true" >> "$GITHUB_OUTPUT"
@@ -159,7 +180,10 @@ jobs:
         run: exit 1
 
   # ---------------------------------------------------------------------------
-  # Delivery (push to main only). Infra is applied before app rollouts so new services exist.
+  # Delivery (push to main only):
+  #   1. Apply dev infra + deploy affected apps to dev automatically
+  #   2. Single manual approval gate (approve-production)
+  #   3. Apply production infra + deploy affected apps to production
   # ---------------------------------------------------------------------------
 
   infra-dev:
@@ -173,21 +197,10 @@ jobs:
       contents: read # Check out infrastructure code.
       id-token: write # Authenticate to GCP using Workload Identity Federation.
 
-  infra-production:
-    name: Infra (production)
-    needs: [code, infra-dev]
-    if: ${{ always() && !cancelled() && !failure() && needs.infra-dev.result == 'success' && github.event_name == 'push' && needs.code.outputs.infra == 'true' }}
-    uses: ./.github/workflows/infra.yml
-    with:
-      environment: production
-    permissions:
-      contents: read # Check out infrastructure code.
-      id-token: write # Authenticate to GCP using Workload Identity Federation.
-
-  deploy:
-    name: Deliver (${{ matrix.app }})
-    needs: [code, ci, infra-dev, infra-production]
-    if: ${{ always() && !cancelled() && !failure() && needs.ci.result == 'success' && (needs.code.outputs.infra != 'true' || needs.infra-production.result == 'success') && github.event_name == 'push' && needs.code.outputs.apps != '[]' }}
+  deploy-dev:
+    name: Deliver dev (${{ matrix.app }})
+    needs: [code, ci, infra-dev]
+    if: ${{ always() && !cancelled() && !failure() && needs.ci.result == 'success' && (needs.code.outputs.infra != 'true' || needs.infra-dev.result == 'success') && github.event_name == 'push' && needs.code.outputs.apps != '[]' }}
     strategy:
       fail-fast: false
       matrix:
@@ -195,8 +208,52 @@ jobs:
     uses: ./.github/workflows/cd.yml
     with:
       app: ${{ matrix.app }}
+      environment: dev
     permissions:
       attestations: write # Sign build provenance.
-      contents: write # Create GitHub releases.
+      contents: write # Required by cd.yml workflow_call permission ceiling.
       id-token: write # Authenticate to GCP and sign provenance.
-      packages: write # Publish images and move environment tags in GHCR.
+      packages: write # Publish container images to GHCR.
+
+  approve-production:
+    name: Approve production
+    needs: [code, ci, infra-dev, deploy-dev]
+    if: ${{ always() && !cancelled() && !failure() && needs.ci.result == 'success' && github.event_name == 'push' && (needs.code.outputs.infra == 'true' || needs.code.outputs.apps != '[]') && (needs.code.outputs.infra != 'true' || needs.infra-dev.result == 'success') && (needs.code.outputs.apps == '[]' || needs.deploy-dev.result == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production-approval
+    steps:
+      - name: Production rollout approved
+        env:
+          INFRA: ${{ needs.code.outputs.infra }}
+          APPS: ${{ needs.code.outputs.apps }}
+        run: echo "Approved production rollout (infra=$INFRA, apps=$APPS)"
+
+  infra-production:
+    name: Infra (production)
+    needs: [code, approve-production]
+    if: ${{ always() && !cancelled() && !failure() && needs.approve-production.result == 'success' && github.event_name == 'push' && needs.code.outputs.infra == 'true' }}
+    uses: ./.github/workflows/infra.yml
+    with:
+      environment: production
+    permissions:
+      contents: read # Check out infrastructure code.
+      id-token: write # Authenticate to GCP using Workload Identity Federation.
+
+  deploy-production:
+    name: Deliver production (${{ matrix.app }})
+    needs: [code, approve-production, infra-production]
+    if: ${{ always() && !cancelled() && !failure() && needs.approve-production.result == 'success' && (needs.code.outputs.infra != 'true' || needs.infra-production.result == 'success') && github.event_name == 'push' && needs.code.outputs.apps != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.code.outputs.apps) }}
+    uses: ./.github/workflows/cd.yml
+    with:
+      app: ${{ matrix.app }}
+      environment: production
+    permissions:
+      attestations: write # Required by cd.yml workflow_call permission ceiling.
+      contents: write # Create GitHub releases.
+      id-token: write # Authenticate to GCP using Workload Identity Federation.
+      packages: write # Required by cd.yml workflow_call permission ceiling.

@@ -10,6 +10,7 @@ locals {
     "logging.googleapis.com",
     "monitoring.googleapis.com",
     "run.googleapis.com",
+    "secretmanager.googleapis.com",
     "storage.googleapis.com",
     "sts.googleapis.com",
   ])
@@ -38,6 +39,7 @@ locals {
     "roles/logging.configWriter",
     "roles/monitoring.admin",
     "roles/run.admin",
+    "roles/secretmanager.admin",
     "roles/serviceusage.serviceUsageAdmin",
     "roles/iam.serviceAccountCreator",
     "roles/iam.serviceAccountDeleter",
@@ -249,14 +251,11 @@ module "cloud_run_apps" {
   min_instances = try(each.value.minInstances, 0)
   max_instances = try(each.value.maxInstances, 3)
   env_vars = merge(
+    { GCP_PROJECT_ID = google_project.environment.project_id },
     try(each.value.env, {}),
-    each.key == "status" ? {
-      GCP_PROJECT_ID          = google_project.environment.project_id
-      BIGQUERY_DATASET        = "uptime_monitoring"
-      HELGEFOLELSE_HEALTH_URL = var.environment == "production" ? "https://helgefolelse.no/api/health" : "https://helgefolelse-web-${google_project.environment.number}.${local.region}.run.app/api/health"
-      HELGEFOLELSE_URL        = var.environment == "production" ? "https://helgefolelse.no" : "https://helgefolelse-web-${google_project.environment.number}.${local.region}.run.app"
-    } : {}
+    try(each.value.environments[var.environment].env, {}),
   )
+  secrets   = toset(try(each.value.secrets, []))
   is_public = try(each.value.public, true)
 
   project_id     = google_project.environment.project_id
@@ -284,7 +283,7 @@ module "uptime_monitoring" {
       path         = try(local.apps[app].healthPath, "/api/health")
       period       = try(local.apps[app].uptimePeriod, "60s")
       timeout      = try(local.apps[app].uptimeTimeout, "10s")
-    }
+    } if try(local.apps[app].public, true) && try(local.apps[app].uptimeCheck, true)
   }
 
   status_runtime_service_account_email = module.cloud_run_apps["status"].runtime_service_account

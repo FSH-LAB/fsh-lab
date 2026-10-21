@@ -7,21 +7,23 @@ import { definePlaywrightConfig } from "./base.js";
  * @param {Object} options
  * @param {string} options.appName Application directory name under apps/
  * @param {number} options.port HTTP port the local standalone server listens on
+ * @param {Record<string, string>} [options.env] Environment variables passed to the standalone server
  * @param {import("@playwright/test").PlaywrightTestConfig} [options.overrides]
  * @returns {import("@playwright/test").PlaywrightTestConfig}
  */
 export function defineNextPlaywrightConfig(options) {
-  const { appName, port, overrides = {} } = options;
+  const { appName, port, env, overrides = {} } = options;
   const baseUrl =
     process.env.PLAYWRIGHT_TEST_BASE_URL || `http://localhost:${port}`;
 
   const defaultWebServer = process.env.PLAYWRIGHT_TEST_BASE_URL
     ? undefined
     : {
-        command: `cp -R .next/static .next/standalone/apps/${appName}/.next/static && PORT=${port} node .next/standalone/apps/${appName}/server.js`,
+        command: `mkdir -p .next/standalone/apps/${appName}/.next/static && cp -R .next/static/. .next/standalone/apps/${appName}/.next/static/ && if [ -d public ]; then mkdir -p .next/standalone/apps/${appName}/public && cp -R public/. .next/standalone/apps/${appName}/public/; fi && PORT=${port} node .next/standalone/apps/${appName}/server.js`,
         url: baseUrl,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
+        ...(env ? { env } : {}),
       };
 
   const { use = {}, webServer, ...restOverrides } = overrides;
