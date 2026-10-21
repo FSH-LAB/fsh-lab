@@ -10,7 +10,7 @@ overrides:
 catalog:
   "@playwright/test": ^1.64.0
   "@tailwindcss/postcss": ^4
-  "@types/node": ^26.6.5
+  "@types/node": ^26.6.4
   "@types/react": ^19
   "@types/react-dom": ^19
   eslint: ^9.39.5
@@ -20,6 +20,6 @@ catalog:
   react-dom: 19.3.0
   tailwindcss: ^4
   typescript: ^7.0.2
-  "@vitest/coverage-v8": ^5.0.4
-  vitest: ^5.0.4
-  zod: 4.6.7
+  "@vitest/coverage-v8": ^5.0.3
+  vitest: ^5.0.3
+  zod: 4.6.5
