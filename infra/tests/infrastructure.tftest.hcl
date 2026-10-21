@@ -164,6 +164,11 @@ run "infra_identity_is_strictly_scoped" {
   }
 
   assert {
+    condition     = google_iam_workload_identity_pool_provider.github.attribute_mapping["attribute.workflow_ref"] == "has(assertion.job_workflow_ref) ? assertion.job_workflow_ref : assertion.workflow_ref"
+    error_message = "Infra workflow trust requires mapping attribute.workflow_ref from job_workflow_ref or workflow_ref."
+  }
+
+  assert {
     condition     = google_iam_workload_identity_pool_provider.github.attribute_mapping["attribute.job_workflow_ref"] == "has(assertion.job_workflow_ref) ? assertion.job_workflow_ref : assertion.workflow_ref"
     error_message = "Deployment workflows without job_workflow_ref must map their workflow_ref claim."
   }
