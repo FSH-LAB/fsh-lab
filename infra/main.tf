@@ -149,6 +149,11 @@ resource "google_service_account" "infra_applier" {
   }
 }
 
+import {
+  to = google_service_account.infra_applier
+  id = "projects/${google_project.environment.project_id}/serviceAccounts/fsh-lab-infra@${google_project.environment.project_id}.iam.gserviceaccount.com"
+}
+
 resource "google_project_iam_member" "infra_applier" {
   for_each = local.infra_roles
 
