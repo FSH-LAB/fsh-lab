@@ -46,12 +46,12 @@ jobs:
       - run: pnpm format:check
       - name: Lint, typecheck, test and build
         run: |
-          [ "$GITHUB_EVENT_NAME" = pull_request ] && set -- --affected
+          [ "$GITHUB_EVENT_NAME" = pull_request ] && export TURBO_SCM_BASE="origin/$GITHUB_BASE_REF" && set -- --affected
           pnpm turbo run lint typecheck test build "$@"
       - name: Run end-to-end tests
         if: github.event_name != 'push'
         run: |
-          [ "$GITHUB_EVENT_NAME" = pull_request ] && set -- --affected
+          [ "$GITHUB_EVENT_NAME" = pull_request ] && export TURBO_SCM_BASE="origin/$GITHUB_BASE_REF" && set -- --affected
           if [ "$(pnpm turbo run test:e2e "$@" --dry=json | jq '.tasks | length')" -gt 0 ]; then
             pnpm exec playwright install --with-deps chromium
             pnpm turbo run test:e2e "$@"
@@ -73,6 +73,7 @@ jobs:
           base="${BASE_REF:+origin/$BASE_REF}"
           base="${base:-${BEFORE:-HEAD^}}"
           [[ "$base" =~ ^0+$ ]] && base="HEAD^"
+          export TURBO_SCM_BASE="$base"
           apps="$(pnpm turbo ls --affected --output=json | jq -c '[.packages.items[] | select(.path | startswith("apps/")) | .name]')"
           if ! git diff --quiet "$base"...HEAD -- Dockerfile .dockerignore .github/actions/build-image; then
             for dir in apps/*/; do
