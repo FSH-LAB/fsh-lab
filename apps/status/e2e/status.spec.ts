@@ -31,7 +31,9 @@ test.describe("Status page", () => {
 
   test("displays service response latency telemetry", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText("Response Latency Telemetry")).toBeVisible();
+    await expect(
+      page.getByText("Response Latency Telemetry", { exact: true }),
+    ).toBeVisible();
   });
 
   test("health check endpoint returns status ok", async ({ request }) => {
