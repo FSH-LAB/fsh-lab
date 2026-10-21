@@ -15,20 +15,38 @@ The state prefix currently remains `helgefolelse/<env>` to protect existing stat
 
 ## Infrastructure Identity Bootstrap (`fsh-lab-infra`)
 
-The CI workflow `infra.yml` uses the dedicated `fsh-lab-infra` service account (`GCP_INFRA_SERVICE_ACCOUNT`). Because standard CI identities cannot escalate project privileges or grant IAM roles, bootstrapping this identity requires an initial operator apply:
+The CI workflow `infra.yml` uses the dedicated `fsh-lab-infra` service account (`GCP_INFRA_SERVICE_ACCOUNT`). Because standard CI identities cannot escalate project privileges or grant IAM roles, bootstrapping this identity requires an initial operator setup once per environment:
 
-The OIDC `attribute.workflow_ref` mapping uses `job_workflow_ref` for reusable workflow calls and `workflow_ref` for manual runs. Both paths restrict impersonation to `infra.yml` on `main`, in the matching repository and environment. Existing environments need an operator apply to update this mapping before automated infrastructure runs can use it.
+The OIDC `attribute.workflow_ref` mapping uses `job_workflow_ref` for reusable workflow calls and `workflow_ref` for manual runs. Both paths restrict impersonation to `infra.yml` on `main`, in the matching repository and environment.
 
-1. Apply `infra/` with operator credentials for each environment:
-   ```sh
-   terraform -chdir=infra init -backend-config="bucket=$PROJECT_ID-terraform-state" -backend-config="prefix=helgefolelse/$ENV"
-   terraform -chdir=infra apply -var-file="environments/$ENV.tfvars"
-   ```
-2. Apply `infra/github/` with operator credentials to write `GCP_INFRA_SERVICE_ACCOUNT`:
-   ```sh
-   terraform -chdir=infra/github init
-   terraform -chdir=infra/github apply
-   ```
+### Step 1: Bootstrap GCP Identity & IAM
+
+Bootstrap an environment in one command with `gcloud` (no local Terraform needed):
+
+```sh
+./scripts/bootstrap-infra.sh dev         # For dev
+./scripts/bootstrap-infra.sh production  # For production
+```
+
+Alternatively, apply `infra/` manually with operator credentials:
+
+```sh
+terraform -chdir=infra init -backend-config="bucket=$PROJECT_ID-terraform-state" -backend-config="prefix=helgefolelse/$ENV"
+terraform -chdir=infra apply -var-file="environments/$ENV.tfvars"
+```
+
+### Step 2: Configure GitHub Environment Variables (`infra/github/`)
+
+Once the GCP identity is created, apply `infra/github/` with administrator credentials to write `GCP_INFRA_SERVICE_ACCOUNT` (and environment policies) in GitHub Actions:
+
+```sh
+export TF_DATA_DIR="$PWD/infra/.terraform/github"
+export GITHUB_TOKEN="$(gh auth token)"
+terraform -chdir=infra/github init
+terraform -chdir=infra/github apply
+```
+
+_(Note: `./scripts/bootstrap-infra.sh` also sets `GCP_INFRA_SERVICE_ACCOUNT` automatically if the GitHub CLI `gh` is logged in)._
 
 ## State Migration Runbook (Migrating to `fsh-lab/<env>`)
 
