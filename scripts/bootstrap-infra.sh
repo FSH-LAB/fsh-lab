@@ -25,7 +25,7 @@ echo "==> Bootstrapping infrastructure identity for '${ENV}' (${PROJECT_ID})..."
 
 # 1. Verify gcloud authentication
 if ! gcloud auth print-access-token >/dev/null 2>&1; then
-  echo "Error: Not authenticated with gcloud. Run 'gcloud auth application-default login' first." >&2
+  echo "Error: Not authenticated with gcloud. Run 'gcloud auth login' first." >&2
   exit 1
 fi
 
@@ -44,12 +44,27 @@ gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" >/dev/n
     --display-name="FSH-LAB Terraform Infrastructure Applier" \
     --quiet
 
-# 4. Bind Workload Identity Federation (matches unmerged, merged, and environment claims)
+# 4. Update provider attribute mapping to support both reusable and manual workflow runs
+echo "==> Updating Workload Identity Pool Provider mapping..."
+gcloud iam workload-identity-pools providers update-oidc github \
+  --project="$PROJECT_ID" \
+  --location=global \
+  --workload-identity-pool=github-actions \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref,attribute.environment=assertion.environment,attribute.workflow_ref=has(assertion.job_workflow_ref)?assertion.job_workflow_ref:assertion.workflow_ref,attribute.job_workflow_ref=has(assertion.job_workflow_ref)?assertion.job_workflow_ref:assertion.workflow_ref" \
+  --quiet
+
+# Revoke overly broad environment-only binding from earlier bootstrap runs
+gcloud iam service-accounts remove-iam-policy-binding "$SA_EMAIL" \
+  --project="$PROJECT_ID" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/${POOL}/attribute.environment/${ENV}" \
+  --quiet >/dev/null 2>&1 || true
+
+# 5. Bind Workload Identity Federation strictly scoped to infra.yml on main
 echo "==> Binding Workload Identity claims..."
 for claim in \
   "attribute.workflow_ref/${REPO}/.github/workflows/infra.yml@refs/heads/main" \
-  "attribute.job_workflow_ref/${REPO}/.github/workflows/infra.yml@refs/heads/main" \
-  "attribute.environment/${ENV}"; do
+  "attribute.job_workflow_ref/${REPO}/.github/workflows/infra.yml@refs/heads/main"; do
   gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
     --project="$PROJECT_ID" \
     --role="roles/iam.workloadIdentityUser" \
@@ -57,7 +72,7 @@ for claim in \
     --quiet >/dev/null
 done
 
-# 5. Grant state bucket access (scoped to environment state prefixes)
+# 6. Grant state bucket access (scoped to environment state prefixes)
 echo "==> Granting Terraform state bucket access..."
 gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
   --member="serviceAccount:${SA_EMAIL}" \
@@ -65,7 +80,7 @@ gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
   --condition="title=environment-state-only,expression=resource.name.startsWith('projects/_/buckets/${BUCKET}/objects/fsh-lab/${ENV}/') || resource.name.startsWith('projects/_/buckets/${BUCKET}/objects/helgefolelse/${ENV}/')" \
   --quiet >/dev/null
 
-# 6. Grant standard project infrastructure roles
+# 7. Grant standard project infrastructure roles
 echo "==> Granting standard project infrastructure roles..."
 for role in \
   roles/viewer roles/iam.securityReviewer roles/iam.workloadIdentityPoolViewer \
