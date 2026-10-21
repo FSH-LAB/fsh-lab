@@ -65,19 +65,35 @@ else
   echo "    ${SA_EMAIL} already exists"
 fi
 
-# 4. Update provider claims before binding Workload Identity Federation permission
+# 4. Bind Workload Identity Federation permission
+echo "==> Configuring Workload Identity User bindings for GitHub Actions..."
+# Attempt to update provider mapping in GCP to include both workflow claims
 gcloud iam workload-identity-pools providers update-oidc github \
   --project="$PROJECT_ID" \
   --location=global \
   --workload-identity-pool=github-actions \
-  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref,attribute.environment=assertion.environment,attribute.workflow_ref=has(assertion.job_workflow_ref) ? assertion.job_workflow_ref : assertion.workflow_ref,attribute.job_workflow_ref=has(assertion.job_workflow_ref) ? assertion.job_workflow_ref : assertion.workflow_ref" \
-  --quiet
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref,attribute.environment=assertion.environment,attribute.workflow_ref=has(assertion.job_workflow_ref)?assertion.job_workflow_ref:assertion.workflow_ref,attribute.job_workflow_ref=has(assertion.job_workflow_ref)?assertion.job_workflow_ref:assertion.workflow_ref" \
+  --quiet >/dev/null 2>&1 || true
 
-echo "==> Configuring Workload Identity User binding for GitHub Actions..."
+# Bind attribute.workflow_ref (used once main is merged with provider claim update)
 gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
   --project="$PROJECT_ID" \
   --role="roles/iam.workloadIdentityUser" \
-  --member="$WIF_MEMBER" \
+  --member="principalSet://iam.googleapis.com/${POOL}/attribute.workflow_ref/${REPO}/.github/workflows/infra.yml@refs/heads/main" \
+  --quiet >/dev/null
+
+# Bind attribute.job_workflow_ref (used by current unmerged provider in GCP)
+gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
+  --project="$PROJECT_ID" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/${POOL}/attribute.job_workflow_ref/${REPO}/.github/workflows/infra.yml@refs/heads/main" \
+  --quiet >/dev/null
+
+# Bind attribute.environment (matches deployer scoping, strictly scoped by provider condition to repo and main)
+gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
+  --project="$PROJECT_ID" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/${POOL}/attribute.environment/${ENV}" \
   --quiet >/dev/null
 
 # 5. Grant state bucket access
@@ -132,17 +148,37 @@ gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
 
 # Apply scoped conditions matching infra/main.tf
 echo "==> Granting scoped projectIamAdmin and serviceAccountAdmin..."
+COND_FILE_IAM=$(mktemp)
+cat > "$COND_FILE_IAM" <<EOF
+{
+  "title": "delegated-role-grants-only",
+  "description": "Allows granting only strictly necessary runtime roles to application service accounts",
+  "expression": "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/run.invoker', 'roles/secretmanager.secretAccessor', 'roles/logging.logWriter', 'roles/monitoring.metricWriter', 'roles/bigquery.jobUser', 'roles/iam.serviceAccountUser', 'roles/iam.workloadIdentityUser'])"
+}
+EOF
+
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/resourcemanager.projectIamAdmin" \
-  --condition="expression=api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/run.invoker', 'roles/secretmanager.secretAccessor', 'roles/logging.logWriter', 'roles/monitoring.metricWriter', 'roles/bigquery.jobUser', 'roles/iam.serviceAccountUser', 'roles/iam.workloadIdentityUser']),title=delegated-role-grants-only,description=Allows granting only strictly necessary runtime roles to application service accounts" \
+  --condition-from-file="$COND_FILE_IAM" \
   --quiet >/dev/null
+rm -f "$COND_FILE_IAM"
+
+COND_FILE_SA=$(mktemp)
+cat > "$COND_FILE_SA" <<EOF
+{
+  "title": "runtime-service-accounts-only",
+  "description": "Allows managing IAM policies only for application runtime service accounts (*-runtime)",
+  "expression": "resource.type == 'iam.googleapis.com/ServiceAccount' && resource.name.endsWith('-runtime@${PROJECT_ID}.iam.gserviceaccount.com')"
+}
+EOF
 
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/iam.serviceAccountAdmin" \
-  --condition="expression=resource.type == 'iam.googleapis.com/ServiceAccount' && resource.name.endsWith('-runtime@${PROJECT_ID}.iam.gserviceaccount.com'),title=runtime-service-accounts-only,description=Allows managing IAM policies only for application runtime service accounts (*-runtime)" \
+  --condition-from-file="$COND_FILE_SA" \
   --quiet >/dev/null
+rm -f "$COND_FILE_SA"
 
 # 7. Configure GitHub Actions environment variable
 echo "==> Configuring GitHub Actions environment variable 'GCP_INFRA_SERVICE_ACCOUNT'..."
