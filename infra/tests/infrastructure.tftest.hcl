@@ -36,13 +36,14 @@ run "app_module_protects_service" {
   command = plan
 
   module {
-    source = "./modules/cloud-run-app"
+    source = "./modules/gke-app"
   }
 
   variables {
     app            = "example-app"
     display_name   = "Example"
     region         = "europe-north2"
+    project_id     = "test-project"
     deployer_email = "deployer@test-project.iam.gserviceaccount.com"
     secrets        = ["API_KEY"]
   }
@@ -53,18 +54,18 @@ run "app_module_protects_service" {
   }
 
   assert {
-    condition     = google_artifact_registry_repository.this.repository_id == "example-app" && google_cloud_run_v2_service.this.name == "example-app-web" && google_service_account.runtime.account_id == "example-app-runtime"
-    error_message = "App resources must follow the <app>, <app>-web and <app>-runtime naming the deploy workflow relies on."
+    condition     = google_artifact_registry_repository.this.repository_id == "example-app" && google_service_account.runtime.account_id == "example-app-runtime"
+    error_message = "App resources must follow the <app> and <app>-runtime naming conventions."
   }
 
   assert {
-    condition     = google_artifact_registry_repository.this.location == "europe-north2" && google_cloud_run_v2_service.this.location == "europe-north2"
-    error_message = "The registry and Cloud Run service must use the configured region."
+    condition     = google_artifact_registry_repository.this.location == "europe-north2"
+    error_message = "The registry must use the configured region."
   }
 
   assert {
-    condition     = google_cloud_run_v2_service.this.deletion_protection && google_cloud_run_v2_service.this.invoker_iam_disabled && google_cloud_run_v2_service.this.template[0].containers[0].ports[0].container_port == 8080
-    error_message = "Cloud Run must stay public, deletion-protected and serve on port 8080."
+    condition     = google_service_account_iam_member.workload_identity_user.role == "roles/iam.workloadIdentityUser" && google_service_account_iam_member.workload_identity_user.member == "serviceAccount:test-project.svc.id.goog[example-app/example-app-sa]"
+    error_message = "App runtime identity must grant Workload Identity to its Kubernetes service account."
   }
 
   assert {
@@ -77,13 +78,14 @@ run "app_module_rejects_long_names" {
   command = plan
 
   module {
-    source = "./modules/cloud-run-app"
+    source = "./modules/gke-app"
   }
 
   variables {
     app            = "a-name-that-is-far-too-long"
     display_name   = "Too long"
     region         = "europe-north2"
+    project_id     = "test-project"
     deployer_email = "deployer@test-project.iam.gserviceaccount.com"
   }
 
@@ -113,8 +115,13 @@ run "discovers_applications" {
   }
 
   assert {
-    condition     = contains(keys(module.cloud_run_apps), "helgefolelse") && contains(keys(module.cloud_run_apps), "status")
-    error_message = "Cloud Run app modules must be instantiated for each discovered application."
+    condition     = contains(keys(module.gke_apps), "helgefolelse") && contains(keys(module.gke_apps), "status")
+    error_message = "GKE app modules must be instantiated for each discovered application."
+  }
+
+  assert {
+    condition     = module.network.network_name == "fsh-lab-dev" && module.gke_cluster.cluster_name == "fsh-lab-dev"
+    error_message = "VPC network and GKE cluster must be instantiated with environment naming."
   }
 
   assert {

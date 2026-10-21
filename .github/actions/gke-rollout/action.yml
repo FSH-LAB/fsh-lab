@@ -1,0 +1,155 @@
+name: "GKE Rollout"
+description: "Deploys an attested image to Google Kubernetes Engine (GKE) with Kustomize, rollout verification, and automated smoke testing"
+
+inputs:
+  app:
+    description: "Application name (directory under apps/)"
+    required: true
+  environment:
+    description: "Target deployment environment (dev or production)"
+    required: true
+  release:
+    description: "Commit SHA or release tag (e.g. helgefolelse@v2026.10.3) to deploy"
+    required: true
+  digest:
+    description: "Image digest (sha256:...) if already known"
+    required: false
+    default: ""
+  gcp_project_id:
+    description: "GCP Project ID"
+    required: true
+  gcp_wif_provider:
+    description: "GCP Workload Identity Federation provider"
+    required: true
+  gcp_deploy_service_account:
+    description: "GCP Service Account for deployment"
+    required: true
+  cluster_name:
+    description: "GKE Cluster Name"
+    required: false
+    default: ""
+  region:
+    description: "Google Cloud Region"
+    required: false
+    default: "europe-north2"
+  github_token:
+    description: "GitHub token for GHCR authentication and GitHub CLI operations"
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  sha:
+    description: "Resolved commit SHA"
+    value: ${{ steps.release.outputs.sha }}
+  image:
+    description: "Resolved image reference with digest"
+    value: ${{ steps.release.outputs.image }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate app name
+      shell: bash
+      env:
+        APP: ${{ inputs.app }}
+      run: '[[ "$APP" =~ ^[a-z][a-z0-9-]{1,20}[a-z0-9]$ ]] || { echo "::error::Invalid app: $APP"; exit 1; }'
+
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version-file: .nvmrc
+        package-manager-cache: false
+
+    - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.github_token }}
+
+    - name: Resolve and verify release
+      id: release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        RELEASE: ${{ inputs.release }}
+        EXPECTED_DIGEST: ${{ inputs.digest }}
+        SERVICE: ${{ inputs.app }}-web
+      run: |
+        [[ "$RELEASE" =~ ^[A-Za-z0-9][A-Za-z0-9._@-]*$ ]] || { echo "::error::Invalid release: $RELEASE"; exit 1; }
+        image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$SERVICE"
+        sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE" --jq .sha)"
+        ancestry="$(gh api "repos/$GITHUB_REPOSITORY/compare/$sha...main" --jq .status)"
+        if [[ "$ancestry" != ahead && "$ancestry" != identical ]]; then
+          echo "::error::Release commit $sha is not an ancestor of current main" >&2
+          exit 1
+        fi
+        if [[ -n "$EXPECTED_DIGEST" ]]; then
+          [[ "$EXPECTED_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Invalid image digest"; exit 1; }
+          digest="$EXPECTED_DIGEST"
+        else
+          digest="$(docker buildx imagetools inspect "$image:$sha" --format '{{ .Manifest.Digest }}')"
+        fi
+        verified=false
+        for signer in cd.yml _cd-app.yml _deploy-app.yml release-app.yml ci-cd.yml; do
+          if gh attestation verify "oci://$image@$digest" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/$signer" \
+            --source-ref refs/heads/main --deny-self-hosted-runners; then
+            verified=true
+            break
+          fi
+        done
+        [[ "$verified" == true ]] || { echo "::error::No valid provenance for $image@$digest" >&2; exit 1; }
+        revision="$(docker buildx imagetools inspect "$image@$digest" --format '{{ json .Image }}' |
+          jq -er 'if has("config") then . else .["linux/amd64"] end |
+            .config.Labels["org.opencontainers.image.revision"]')"
+        if [[ "$revision" != "$sha" ]]; then
+          echo "::error::Image revision $revision does not match requested commit $sha" >&2
+          exit 1
+        fi
+        printf 'sha=%s\nimage=%s@%s\ndigest=%s\n' "$sha" "$image" "$digest" "$digest" >> "$GITHUB_OUTPUT"
+
+    - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+      id: auth
+      with:
+        project_id: ${{ inputs.gcp_project_id }}
+        workload_identity_provider: ${{ inputs.gcp_wif_provider }}
+        service_account: ${{ inputs.gcp_deploy_service_account }}
+
+    - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+    - name: Connect to GKE Cluster
+      uses: google-github-actions/get-gke-credentials@v3.0.0
+      with:
+        cluster_name: ${{ inputs.cluster_name || format('fsh-lab-{0}', inputs.environment) }}
+        location: ${{ inputs.region }}
+        project_id: ${{ inputs.gcp_project_id }}
+
+    - name: Deploy application with Kustomize
+      shell: bash
+      env:
+        APP: ${{ inputs.app }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        IMAGE: ${{ steps.release.outputs.image }}
+      run: |
+        echo "Applying Kustomize overlay for $APP in $ENVIRONMENT..."
+        kubectl apply -k "apps/$APP/k8s/overlays/$ENVIRONMENT"
+        echo "Updating deployment image to $IMAGE..."
+        kubectl set image -n "$APP" "deployment/$APP-web" "web=$IMAGE"
+
+    - name: Verify rollout status
+      shell: bash
+      env:
+        APP: ${{ inputs.app }}
+      run: |
+        kubectl rollout status "deployment/$APP-web" -n "$APP" --timeout=180s
+
+    - name: Smoke test deployment
+      shell: bash
+      env:
+        APP: ${{ inputs.app }}
+        SHA: ${{ steps.release.outputs.sha }}
+      run: |
+        kubectl port-forward -n "$APP" "service/$APP-web" 8080:8080 &
+        PF_PID=$!
+        sleep 3
+        SMOKE_URL="http://127.0.0.1:8080" SHA="$SHA" APP="$APP" node --test "apps/$APP/tests/smoke.mjs"
+        kill "$PF_PID" || true

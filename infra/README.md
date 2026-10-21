@@ -1,52 +1,52 @@
 # Infrastructure
 
-The reusable Infrastructure workflow (`infra.yml`) applies the Terraform configuration for each environment (`dev`, then `production`). `ci.yml` calls it on push to `main` when `infra/` or an `apps/*/infra.json` changes, before app delivery; it can also be dispatched manually per environment. Application deployment workflows update Cloud Run revisions without running Terraform. A separate root manages GitHub environments and deployment variables.
+The reusable Infrastructure workflow (`infra.yml`) applies the Terraform configuration for each environment (`dev`, then `production`). `ci.yml` calls it on push to `main` when `infra/`, an `apps/*/infra.json`, or an `apps/*/k8s/**` manifest changes, before app delivery; it can also be dispatched manually per environment. Application deployment workflows update GKE workloads via Kustomize without running Terraform. A separate root manages GitHub environments and deployment variables.
 
-All environments use `europe-north2`. The region is fixed in Terraform to match the deployment workflow and registry endpoint.
+All environments use `europe-north2`. The region is fixed in Terraform to match the deployment workflow, VPC network, and GKE Autopilot cluster.
 
-| Root            | Manages                                                                                       | State                                                               |
-| --------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `infra/`        | GCP project, APIs, state bucket, Artifact Registry, Cloud Run, service accounts, IAM and OIDC | `gs://<project>-terraform-state/helgefolelse/<env>`                 |
-| `infra/github/` | GitHub environments, reviewers, branch policy and deployment variables                        | `gs://generated-mote-510411-v8-terraform-state/helgefolelse/github` |
+| Root            | Manages                                                                                                  | State                                                               |
+| --------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `infra/`        | GCP project, APIs, state bucket, Artifact Registry, VPC, GKE Autopilot, service accounts, IAM and OIDC   | `gs://<project>-terraform-state/helgefolelse/<env>`                 |
+| `infra/github/` | GitHub environments, reviewers, branch policy and deployment variables                                   | `gs://generated-mote-510411-v8-terraform-state/helgefolelse/github` |
 
-Terraform owns infrastructure; the deploy workflow owns the image, `GIT_SHA`, revisions and traffic. Those release fields are ignored by Terraform. Deletion protection is enabled on core resources.
+Terraform owns infrastructure (VPC, GKE Autopilot cluster, IAM, Workload Identity); the deployment workflow (`cd.yml` via `.github/actions/gke-rollout`) owns container releases, Kustomize overlays, and rollout verification. Core infrastructure resources have deletion protection enabled.
 
 The state prefix currently remains `helgefolelse/<env>` to protect existing state from recreation. Both `helgefolelse/<env>/` and `fsh-lab/<env>/` are permitted by bucket IAM conditions to enable zero-downtime operator migration.
 
+## When Does Terraform Apply Need to Run?
+
+In the FSH-LAB GitOps model, infrastructure changes and application releases are intentionally decoupled:
+
+### 1. Automated Execution via CI/CD (`.github/workflows/infra.yml`)
+Runs automatically on push to `main` when changes touch:
+- Any file in `infra/**` (VPC, subnets, GKE cluster, IAM roles, or uptime monitoring)
+- Any application manifest `apps/*/infra.json` (auto-discovering a new app, changing secrets, or resizing resources)
+
+The automated pipeline executes `terraform plan` -> applies `dev` -> awaits manual sign-off on the `production-approval` gate -> applies `production`.
+
+> [!NOTE]
+> Routine application releases (modifying code in `apps/<app>/src/**` or Kubernetes overlays in `apps/<app>/k8s/**`) **DO NOT run Terraform**. They are delivered directly to GKE via `.github/workflows/cd.yml` using `kubectl` and Kustomize.
+
+### 2. Manual Operator Execution (Local `terraform apply`)
+A human operator with project administrator privileges (`gcloud auth application-default login`) only needs to run `terraform apply` directly in these 4 scenarios:
+
+1. **Initial Project / Environment Bootstrap:** Setting up a fresh GCP project before CI has an identity (`./scripts/bootstrap-infra.sh <env>`).
+2. **Privilege & Trust Boundary Changes:** Modifying Workload Identity Federation provider conditions, project IAM admin bindings, or state bucket IAM rules (CI intentionally lacks permission to escalate its own project IAM privileges).
+3. **GitHub Root Updates (`infra/github/`):** Updating GitHub environments, reviewers, or deployment variables with `GITHUB_TOKEN=$(gh auth token)`. CI cannot modify its own branch protection rules.
+4. **State Migrations & Disaster Recovery:** Running `terraform state mv`, backend state prefix migrations (`helgefolelse/<env>` to `fsh-lab/<env>`), or resource imports (`terraform import`).
+
+---
+
 ## Infrastructure Identity Bootstrap (`fsh-lab-infra`)
 
-The CI workflow `infra.yml` uses the dedicated `fsh-lab-infra` service account (`GCP_INFRA_SERVICE_ACCOUNT`). Because standard CI identities cannot escalate project privileges or grant IAM roles, bootstrapping this identity requires an initial operator setup once per environment:
-
-The OIDC `attribute.workflow_ref` mapping uses `job_workflow_ref` for reusable workflow calls and `workflow_ref` for manual runs. Both paths restrict impersonation to `infra.yml` on `main`, in the matching repository and environment.
-
-### Step 1: Bootstrap GCP Identity & IAM
-
-Bootstrap an environment in one command with `gcloud` (no local Terraform needed):
+The CI workflow `infra.yml` uses the dedicated `fsh-lab-infra` service account (`GCP_INFRA_SERVICE_ACCOUNT`). To bootstrap this identity in a fresh or uninitialized environment:
 
 ```sh
 ./scripts/bootstrap-infra.sh dev         # For dev
 ./scripts/bootstrap-infra.sh production  # For production
 ```
 
-Alternatively, apply `infra/` manually with operator credentials:
-
-```sh
-terraform -chdir=infra init -backend-config="bucket=$PROJECT_ID-terraform-state" -backend-config="prefix=helgefolelse/$ENV"
-terraform -chdir=infra apply -var-file="environments/$ENV.tfvars"
-```
-
-### Step 2: Configure GitHub Environment Variables (`infra/github/`)
-
-Once the GCP identity is created, apply `infra/github/` with administrator credentials to write `GCP_INFRA_SERVICE_ACCOUNT` (and environment policies) in GitHub Actions:
-
-```sh
-export TF_DATA_DIR="$PWD/infra/.terraform/github"
-export GITHUB_TOKEN="$(gh auth token)"
-terraform -chdir=infra/github init
-terraform -chdir=infra/github apply
-```
-
-_(Note: `./scripts/bootstrap-infra.sh` also sets `GCP_INFRA_SERVICE_ACCOUNT` automatically if the GitHub CLI `gh` is logged in)._
+This script enables prerequisite GCP APIs, ensures the GCS state bucket exists, and applies `infra/` using operator credentials so that Terraform natively provisions the VPC, GKE cluster, Workload Identity pool, and IAM roles without bash duplication.
 
 ## State Migration Runbook (Migrating to `fsh-lab/<env>`)
 
@@ -62,16 +62,18 @@ To migrate existing environment state from `helgefolelse/<env>` to `fsh-lab/<env
 3. Run `terraform -chdir=infra plan -var-file="environments/$ENV.tfvars"` and verify **0 to add, 0 to change, 0 to destroy**.
 4. Once verified for both `dev` and `production`, update the `-backend-config="prefix=fsh-lab/<env>"` in `.github/workflows/infra.yml`.
 
-## Application Manifest Discovery (`infra/modules/cloud-run-app`)
+## Application Manifest Discovery (`infra/modules/gke-app`)
 
 Applications in the monorepo are dynamically discovered from their local manifests (`apps/*/infra.json`) using Terraform's `fileset()` function:
 
 - Provisions a dedicated Artifact Registry repository (`projects/<project>/locations/<region>/repositories/<app>`)
-- Creates an isolated Cloud Run runtime service account (`<app>-runtime@...`)
-- Deploys the Cloud Run service (`<app>-web`) with deletion protection, configured resource limits (CPU/Memory/Scaling), and candidate traffic tagging
-- Grants the deployer service account permission to act as the app runtime identity
+- Creates an isolated GKE runtime service account (`<app>-runtime@...`)
+- Configures GKE Workload Identity binding (`roles/iam.workloadIdentityUser`) for the Kubernetes ServiceAccount `<app>-sa` in namespace `<app>`
+- Provisions declared secrets in Google Secret Manager and grants accessor permissions to `<app>-runtime`
 
-To add a new application to the environment, create `apps/<name>/infra.json` specifying the application metadata (see `.agents/skills/add-app/SKILL.md`). No changes to `.tf` files are required.
+Kubernetes manifests are organized per app under `apps/<app>/k8s/` with declarative Kustomize `base` and environment `overlays` (`dev`, `production`). Deployments are orchestrated via `.github/actions/gke-rollout`.
+
+To add a new application to the environment, create `apps/<name>/infra.json` and `apps/<name>/k8s/` specifying application metadata and Kubernetes manifests. No changes to `.tf` files are required.
 
 To roll out this permission boundary, pause deployments and apply the GCP root with operator credentials in each environment. The plan must add the conditional bucket grant. It removes the deployer's project-wide `roles/storage.admin` grant only if that grant was already tracked in this state; additive IAM resources do not remove unmanaged grants. CI cannot apply this IAM change itself.
 

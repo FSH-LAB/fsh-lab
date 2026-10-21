@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: helgefolelse
+  labels:
+    app.kubernetes.io/name: helgefolelse
+    app.kubernetes.io/part-of: fsh-lab

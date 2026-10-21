@@ -40,6 +40,7 @@ locals {
         GCP_WIF_PROVIDER           = "projects/${env.project_number}/locations/global/workloadIdentityPools/github-actions/providers/github"
         GCP_DEPLOY_SERVICE_ACCOUNT = "helgefolelse-deployer@${env.project_id}.iam.gserviceaccount.com"
         GCP_INFRA_SERVICE_ACCOUNT  = "fsh-lab-infra@${env.project_id}.iam.gserviceaccount.com"
+        GCP_GKE_CLUSTER            = "fsh-lab-${name}"
       } : "${name}/${key}" => { environment = name, name = key, value = value }
     }
   ]...)

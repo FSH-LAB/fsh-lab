@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - httproute.yaml
+
+patches:
+  - target:
+      kind: ServiceAccount
+      name: status-sa
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/iam.gke.io~1gcp-service-account
+        value: status-runtime@quick-pointer-510215-s6.iam.gserviceaccount.com
+  - target:
+      kind: Deployment
+      name: status-web
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: HELGEFOLELSE_HEALTH_URL
+          value: http://helgefolelse-web.helgefolelse.svc.cluster.local:8080/api/health
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: HELGEFOLELSE_URL
+          value: http://helgefolelse-web.helgefolelse.svc.cluster.local:8080
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: GCP_PROJECT_ID
+          value: quick-pointer-510215-s6
