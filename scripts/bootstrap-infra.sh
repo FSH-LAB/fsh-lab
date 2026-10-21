@@ -65,7 +65,14 @@ else
   echo "    ${SA_EMAIL} already exists"
 fi
 
-# 4. Bind Workload Identity Federation permission
+# 4. Update provider claims before binding Workload Identity Federation permission
+gcloud iam workload-identity-pools providers update-oidc github \
+  --project="$PROJECT_ID" \
+  --location=global \
+  --workload-identity-pool=github-actions \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref,attribute.environment=assertion.environment,attribute.workflow_ref=has(assertion.job_workflow_ref) ? assertion.job_workflow_ref : assertion.workflow_ref,attribute.job_workflow_ref=has(assertion.job_workflow_ref) ? assertion.job_workflow_ref : assertion.workflow_ref" \
+  --quiet
+
 echo "==> Configuring Workload Identity User binding for GitHub Actions..."
 gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
   --project="$PROJECT_ID" \
