@@ -29,6 +29,25 @@ if [[ ! "$APP_NAME" =~ ^[a-z][a-z0-9-]{1,20}[a-z0-9]$ ]]; then
   exit 1
 fi
 
+# Validate display name: non-empty, max 50 chars, no line breaks
+if [[ -z "${DISPLAY_NAME// }" ]]; then
+  echo "Error: Display name cannot be empty or whitespace only." >&2
+  exit 1
+fi
+
+if [[ ${#DISPLAY_NAME} -gt 50 ]]; then
+  echo "Error: Display name exceeds 50 characters." >&2
+  exit 1
+fi
+
+if [[ "$DISPLAY_NAME" =~ [$'\r'$'\n'] ]]; then
+  echo "Error: Display name cannot contain line breaks." >&2
+  exit 1
+fi
+
+# Safely serialize display name to JSON to prevent JSON, TypeScript string, or JSX injection
+DISPLAY_JSON=$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$DISPLAY_NAME")
+
 APP_DIR="apps/$APP_NAME"
 if [[ -d "$APP_DIR" ]]; then
   echo "Error: Directory '$APP_DIR' already exists." >&2
@@ -42,7 +61,7 @@ mkdir -p "$APP_DIR/tests"
 # 1. infra.json
 cat > "$APP_DIR/infra.json" <<EOF
 {
-  "displayName": "$DISPLAY_NAME",
+  "displayName": $DISPLAY_JSON,
   "public": true,
   "cpu": "1000m",
   "memory": "512Mi",
@@ -175,9 +194,11 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 
+const appTitle = $DISPLAY_JSON;
+
 export const metadata: Metadata = {
-  title: "$DISPLAY_NAME",
-  description: "$DISPLAY_NAME application in FSH-LAB.",
+  title: appTitle,
+  description: \`\${appTitle} application in FSH-LAB.\`,
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -191,10 +212,12 @@ EOF
 
 # 9. src/app/page.tsx
 cat > "$APP_DIR/src/app/page.tsx" <<EOF
+const appTitle = $DISPLAY_JSON;
+
 export default function Page() {
   return (
     <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1>$DISPLAY_NAME</h1>
+      <h1>{appTitle}</h1>
       <p>Application is healthy and running.</p>
     </main>
   );
@@ -253,7 +276,8 @@ test(
 
 test("home page renders", { timeout: 90_000 }, async () => {
   const html = await request("/");
-  assert.ok(html.includes("$DISPLAY_NAME"), "Home page should contain display name");
+  const expectedTitle = $DISPLAY_JSON;
+  assert.ok(html.includes(expectedTitle), "Home page should contain display name");
 });
 EOF
 

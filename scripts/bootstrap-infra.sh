@@ -89,7 +89,7 @@ gcloud storage buckets add-iam-policy-binding "gs://${STATE_BUCKET}" \
   --quiet >/dev/null
 
 # 6. Grant project infrastructure administration roles to the service account
-echo "==> Granting project infrastructure roles to '${SA_NAME}'..."
+echo "==> Granting standard project infrastructure roles to '${SA_NAME}'..."
 ROLES=(
   "roles/viewer"
   "roles/iam.securityReviewer"
@@ -106,8 +106,6 @@ ROLES=(
   "roles/iam.serviceAccountCreator"
   "roles/iam.serviceAccountDeleter"
   "roles/iam.serviceAccountUser"
-  "roles/resourcemanager.projectIamAdmin"
-  "roles/iam.serviceAccountAdmin"
 )
 
 for role in "${ROLES[@]}"; do
@@ -117,6 +115,46 @@ for role in "${ROLES[@]}"; do
     --condition=None \
     --quiet >/dev/null
 done
+
+# Revoke any unconditional grants created by previous bootstrap runs
+echo "==> Ensuring no over-privileged unconditional IAM grants exist..."
+gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/resourcemanager.projectIamAdmin" \
+  --condition=None \
+  --quiet >/dev/null 2>&1 || true
+
+gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/iam.serviceAccountAdmin" \
+  --condition=None \
+  --quiet >/dev/null 2>&1 || true
+
+# Apply scoped conditions matching infra/main.tf
+echo "==> Granting scoped projectIamAdmin and serviceAccountAdmin..."
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/resourcemanager.projectIamAdmin" \
+  --condition="expression=api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/run.invoker', 'roles/secretmanager.secretAccessor', 'roles/logging.logWriter', 'roles/monitoring.metricWriter', 'roles/bigquery.jobUser', 'roles/iam.serviceAccountUser', 'roles/iam.workloadIdentityUser']),title=delegated-role-grants-only,description=Allows granting only strictly necessary runtime roles to application service accounts" \
+  --quiet >/dev/null
+
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/iam.serviceAccountAdmin" \
+  --condition="expression=resource.type == 'iam.googleapis.com/ServiceAccount' && resource.name.endsWith('-runtime@${PROJECT_ID}.iam.gserviceaccount.com'),title=runtime-service-accounts-only,description=Allows managing IAM policies only for application runtime service accounts (*-runtime)" \
+  --quiet >/dev/null
+
+# 7. Configure GitHub Actions environment variable
+echo "==> Configuring GitHub Actions environment variable 'GCP_INFRA_SERVICE_ACCOUNT'..."
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  gh variable set GCP_INFRA_SERVICE_ACCOUNT --env "$ENV" --body "$SA_EMAIL" --repo "$REPO"
+  echo "    Configured GCP_INFRA_SERVICE_ACCOUNT in GitHub environment '${ENV}'"
+else
+  echo "    NOTE: GitHub CLI ('gh') is not authenticated."
+  echo "    Ensure GCP_INFRA_SERVICE_ACCOUNT is set in GitHub environment '${ENV}' by running:"
+  echo "    terraform -chdir=infra/github apply"
+  echo "    (or: gh variable set GCP_INFRA_SERVICE_ACCOUNT --env ${ENV} --body ${SA_EMAIL})"
+fi
 
 echo ""
 echo "SUCCESS: Infrastructure identity bootstrapped for '${ENV}'!"

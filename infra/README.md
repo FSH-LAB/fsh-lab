@@ -19,19 +19,30 @@ The CI workflow `infra.yml` uses the dedicated `fsh-lab-infra` service account (
 
 The OIDC `attribute.workflow_ref` mapping uses `job_workflow_ref` for reusable workflow calls and `workflow_ref` for manual runs. Both paths restrict impersonation to `infra.yml` on `main`, in the matching repository and environment.
 
-Bootstrap an environment in one command with `gcloud` (no local Terraform needed):
+### Step 1: Bootstrap GCP Identity & IAM
 
+Bootstrap an environment in one command with `gcloud` (no local Terraform needed):
 ```sh
 ./scripts/bootstrap-infra.sh dev         # For dev
 ./scripts/bootstrap-infra.sh production  # For production
 ```
 
 Alternatively, apply `infra/` manually with operator credentials:
-
 ```sh
 terraform -chdir=infra init -backend-config="bucket=$PROJECT_ID-terraform-state" -backend-config="prefix=helgefolelse/$ENV"
 terraform -chdir=infra apply -var-file="environments/$ENV.tfvars"
 ```
+
+### Step 2: Configure GitHub Environment Variables (`infra/github/`)
+
+Once the GCP identity is created, apply `infra/github/` with administrator credentials to write `GCP_INFRA_SERVICE_ACCOUNT` (and environment policies) in GitHub Actions:
+```sh
+export TF_DATA_DIR="$PWD/infra/.terraform/github"
+export GITHUB_TOKEN="$(gh auth token)"
+terraform -chdir=infra/github init
+terraform -chdir=infra/github apply
+```
+*(Note: `./scripts/bootstrap-infra.sh` also sets `GCP_INFRA_SERVICE_ACCOUNT` automatically if the GitHub CLI `gh` is logged in).*
 
 ## State Migration Runbook (Migrating to `fsh-lab/<env>`)
 
