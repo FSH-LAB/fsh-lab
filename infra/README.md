@@ -20,12 +20,14 @@ The CI workflow `infra.yml` uses the dedicated `fsh-lab-infra` service account (
 The OIDC `attribute.workflow_ref` mapping uses `job_workflow_ref` for reusable workflow calls and `workflow_ref` for manual runs. Both paths restrict impersonation to `infra.yml` on `main`, in the matching repository and environment.
 
 Bootstrap an environment in one command with `gcloud` (no local Terraform needed):
+
 ```sh
 ./scripts/bootstrap-infra.sh dev         # For dev
 ./scripts/bootstrap-infra.sh production  # For production
 ```
 
 Alternatively, apply `infra/` manually with operator credentials:
+
 ```sh
 terraform -chdir=infra init -backend-config="bucket=$PROJECT_ID-terraform-state" -backend-config="prefix=helgefolelse/$ENV"
 terraform -chdir=infra apply -var-file="environments/$ENV.tfvars"
