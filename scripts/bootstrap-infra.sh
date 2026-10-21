@@ -78,7 +78,7 @@ echo "==> Granting access to Terraform state bucket 'gs://${STATE_BUCKET}'..."
 gcloud storage buckets add-iam-policy-binding "gs://${STATE_BUCKET}" \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/storage.objectAdmin" \
-  --condition=None \
+  --condition="title=environment-state-only,expression=resource.name.startsWith('projects/_/buckets/${STATE_BUCKET}/objects/fsh-lab/${ENV}/') || resource.name.startsWith('projects/_/buckets/${STATE_BUCKET}/objects/helgefolelse/${ENV}/')" \
   --quiet >/dev/null
 
 # 6. Grant project infrastructure administration roles to the service account
