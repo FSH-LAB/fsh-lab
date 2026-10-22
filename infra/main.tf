@@ -1,5 +1,5 @@
 locals {
-  region = "europe-north2"
+  region = "europe-north1"
 
   services = toset([
     "artifactregistry.googleapis.com",
@@ -109,6 +109,7 @@ resource "google_storage_bucket" "state" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes  = [location]
   }
 }
 
@@ -285,7 +286,10 @@ module "gke_apps" {
   region         = local.region
   deployer_email = google_service_account.deployer.email
 
-  depends_on = [google_project_service.required]
+  depends_on = [
+    google_project_service.required,
+    module.gke_cluster,
+  ]
 }
 
 # ---------------------------------------------------------------------------

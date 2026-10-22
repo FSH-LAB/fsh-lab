@@ -99,6 +99,7 @@ jobs:
           gcp_wif_provider: ${{ vars.GCP_WIF_PROVIDER }}
           gcp_deploy_service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
           cluster_name: ${{ vars.GCP_GKE_CLUSTER || 'fsh-lab-dev' }}
+          region: ${{ vars.GCP_REGION || 'europe-north1' }}
 
   deploy-production:
     name: Deploy production
@@ -132,6 +133,7 @@ jobs:
           gcp_wif_provider: ${{ vars.GCP_WIF_PROVIDER }}
           gcp_deploy_service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
           cluster_name: ${{ vars.GCP_GKE_CLUSTER || 'fsh-lab-production' }}
+          region: ${{ vars.GCP_REGION || 'europe-north1' }}
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}

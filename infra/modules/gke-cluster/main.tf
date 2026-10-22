@@ -7,6 +7,7 @@ resource "google_container_cluster" "primary" {
   location = var.region
 
   enable_autopilot = true
+  node_locations   = var.node_locations
 
   network    = var.network_id
   subnetwork = var.subnetwork_id
@@ -27,6 +28,12 @@ resource "google_container_cluster" "primary" {
   }
 
   deletion_protection = false
+
+  timeouts {
+    create = "45m"
+    update = "45m"
+    delete = "45m"
+  }
 
   lifecycle {
     prevent_destroy = true

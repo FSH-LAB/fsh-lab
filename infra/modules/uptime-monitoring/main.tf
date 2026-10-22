@@ -12,6 +12,10 @@ resource "google_bigquery_dataset" "uptime_monitoring" {
     environment = var.environment
     managed_by  = "terraform"
   }
+
+  lifecycle {
+    ignore_changes = [location]
+  }
 }
 
 # ---------------------------------------------------------------------------

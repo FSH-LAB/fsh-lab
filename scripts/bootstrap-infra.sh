@@ -18,7 +18,7 @@ set -euo pipefail
 # ==============================================================================
 
 ENV="${1:-dev}"
-REGION="europe-north2"
+REGION="europe-north1"
 
 case "$ENV" in
   dev)
@@ -73,7 +73,7 @@ else
   echo "    Bucket gs://${BUCKET} already exists."
 fi
 
-echo "==> [4/4] Executing initial Terraform apply via operator credentials..."
+echo "==> [4/4] Executing Terraform apply via operator credentials..."
 export TF_IN_AUTOMATION=1
 terraform -chdir=infra init -input=false -reconfigure \
   -backend-config="bucket=${BUCKET}" \

@@ -42,7 +42,7 @@ run "app_module_protects_service" {
   variables {
     app            = "example-app"
     display_name   = "Example"
-    region         = "europe-north2"
+    region         = "europe-north1"
     project_id     = "test-project"
     deployer_email = "deployer@test-project.iam.gserviceaccount.com"
     secrets        = ["API_KEY"]
@@ -59,7 +59,7 @@ run "app_module_protects_service" {
   }
 
   assert {
-    condition     = google_artifact_registry_repository.this.location == "europe-north2"
+    condition     = google_artifact_registry_repository.this.location == "europe-north1"
     error_message = "The registry must use the configured region."
   }
 
@@ -84,7 +84,7 @@ run "app_module_rejects_long_names" {
   variables {
     app            = "a-name-that-is-far-too-long"
     display_name   = "Too long"
-    region         = "europe-north2"
+    region         = "europe-north1"
     project_id     = "test-project"
     deployer_email = "deployer@test-project.iam.gserviceaccount.com"
   }

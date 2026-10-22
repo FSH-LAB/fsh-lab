@@ -28,3 +28,9 @@ variable "master_ipv4_cidr_block" {
   description = "CIDR block for GKE control plane"
   default     = "172.16.0.0/28"
 }
+
+variable "node_locations" {
+  type        = list(string)
+  description = "Zones to restrict worker nodes to (or null to use all available regional zones)"
+  default     = null
+}
