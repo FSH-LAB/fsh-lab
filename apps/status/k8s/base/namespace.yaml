@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: status
+  labels:
+    app.kubernetes.io/name: status
+    app.kubernetes.io/part-of: fsh-lab

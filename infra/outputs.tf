@@ -1,8 +1,11 @@
-output "service_urls" {
-  description = "Cloud Run URL per app."
-  value = {
-    for app, m in module.cloud_run_apps : app => m.service_url
-  }
+output "cluster_name" {
+  description = "GKE Autopilot cluster name"
+  value       = module.gke_cluster.cluster_name
+}
+
+output "cluster_endpoint" {
+  description = "GKE Autopilot control plane endpoint"
+  value       = module.gke_cluster.cluster_endpoint
 }
 
 output "github_variables" {

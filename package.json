@@ -6,7 +6,6 @@
     "node": ">=24"
   },
   "scripts": {
-    "create-app": "bash scripts/create-app.sh",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",

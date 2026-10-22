@@ -83,7 +83,7 @@ jobs:
             done
           fi
           echo "apps=$apps" >> "$GITHUB_OUTPUT"
-          if git diff --quiet "$base"...HEAD -- infra 'apps/*/infra.json' .github/workflows/infra.yml; then
+          if git diff --quiet "$base"...HEAD -- infra 'apps/*/infra.json' 'apps/*/k8s/**' .github/workflows/infra.yml; then
             echo "infra=false" >> "$GITHUB_OUTPUT"
           else
             echo "infra=true" >> "$GITHUB_OUTPUT"

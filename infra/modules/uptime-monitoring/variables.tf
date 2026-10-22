@@ -11,7 +11,7 @@ variable "environment" {
 variable "region" {
   type        = string
   description = "GCP Region for BigQuery dataset."
-  default     = "europe-north2"
+  default     = "europe-north1"
 }
 
 variable "monitored_services" {

@@ -1,10 +1,12 @@
 locals {
-  region = "europe-north2"
+  region = "europe-north1"
 
   services = toset([
     "artifactregistry.googleapis.com",
     "bigquery.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "compute.googleapis.com",
+    "container.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "logging.googleapis.com",
@@ -23,6 +25,8 @@ locals {
     "roles/iam.workloadIdentityPoolViewer",
     "roles/artifactregistry.admin",
     "roles/bigquery.admin",
+    "roles/container.clusterViewer",
+    "roles/container.developer",
     "roles/logging.configWriter",
     "roles/monitoring.admin",
     "roles/run.admin",
@@ -36,6 +40,8 @@ locals {
     "roles/iam.workloadIdentityPoolViewer",
     "roles/artifactregistry.admin",
     "roles/bigquery.admin",
+    "roles/compute.networkAdmin",
+    "roles/container.admin",
     "roles/logging.configWriter",
     "roles/monitoring.admin",
     "roles/run.admin",
@@ -103,6 +109,7 @@ resource "google_storage_bucket" "state" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes  = [location]
   }
 }
 
@@ -165,7 +172,7 @@ resource "google_project_iam_member" "infra_applier_iam_admin" {
   condition {
     title       = "delegated-role-grants-only"
     description = "Allows granting only strictly necessary runtime roles to application service accounts"
-    expression  = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/run.invoker', 'roles/secretmanager.secretAccessor', 'roles/logging.logWriter', 'roles/monitoring.metricWriter', 'roles/bigquery.jobUser', 'roles/iam.serviceAccountUser'])"
+    expression  = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/run.invoker', 'roles/secretmanager.secretAccessor', 'roles/logging.logWriter', 'roles/monitoring.metricWriter', 'roles/bigquery.jobUser', 'roles/iam.serviceAccountUser', 'roles/iam.workloadIdentityUser'])"
   }
 }
 
@@ -238,32 +245,51 @@ resource "google_service_account_iam_member" "github_infra_applier" {
 }
 
 # ---------------------------------------------------------------------------
+# Platform Networking & GKE Autopilot Cluster
+# ---------------------------------------------------------------------------
+
+module "network" {
+  source = "./modules/network"
+
+  project_id  = google_project.environment.project_id
+  region      = local.region
+  environment = var.environment
+
+  depends_on = [google_project_service.required]
+}
+
+module "gke_cluster" {
+  source = "./modules/gke-cluster"
+
+  project_id    = google_project.environment.project_id
+  region        = local.region
+  environment   = var.environment
+  network_id    = module.network.network_id
+  subnetwork_id = module.network.subnetwork_id
+
+  depends_on = [google_project_service.required]
+}
+
+# ---------------------------------------------------------------------------
 # Apps: auto-discovered modules under apps/*/infra.json. See infra/README.md.
 # ---------------------------------------------------------------------------
 
-module "cloud_run_apps" {
+module "gke_apps" {
   for_each = local.apps
-  source   = "./modules/cloud-run-app"
+  source   = "./modules/gke-app"
 
-  app           = each.key
-  display_name  = each.value.displayName
-  cpu           = try(each.value.cpu, "1000m")
-  memory        = try(each.value.memory, "512Mi")
-  min_instances = try(each.value.minInstances, 0)
-  max_instances = try(each.value.maxInstances, 3)
-  env_vars = merge(
-    { GCP_PROJECT_ID = google_project.environment.project_id },
-    try(each.value.env, {}),
-    try(each.value.environments[var.environment].env, {}),
-  )
-  secrets   = toset(try(each.value.secrets, []))
-  is_public = try(each.value.public, true)
+  app          = each.key
+  display_name = each.value.displayName
+  secrets      = toset(try(each.value.secrets, []))
 
   project_id     = google_project.environment.project_id
   region         = local.region
   deployer_email = google_service_account.deployer.email
 
-  depends_on = [google_project_service.required]
+  depends_on = [
+    google_project_service.required,
+    module.gke_cluster,
+  ]
 }
 
 # ---------------------------------------------------------------------------
@@ -278,49 +304,22 @@ module "uptime_monitoring" {
   region      = local.region
 
   monitored_services = {
-    for app, m in module.cloud_run_apps : app => {
+    for app, m in module.gke_apps : app => {
       display_name = local.apps[app].displayName
-      host         = replace(replace(m.service_url, "https://", ""), "/", "")
+      host         = try(local.apps[app].host, "${app}.fsh.lab")
       path         = try(local.apps[app].healthPath, "/api/health")
       period       = try(local.apps[app].uptimePeriod, "60s")
       timeout      = try(local.apps[app].uptimeTimeout, "10s")
     } if try(local.apps[app].public, true) && try(local.apps[app].uptimeCheck, true)
   }
 
-  status_runtime_service_account_email = module.cloud_run_apps["status"].runtime_service_account
+  status_runtime_service_account_email = module.gke_apps["status"].runtime_service_account
 
   depends_on = [google_project_service.required]
 }
 
-# Migrate single modules into the for_each cloud_run_apps module
+# Migrate resources into GKE modules
 moved {
-  from = module.helgefolelse
-  to   = module.cloud_run_apps["helgefolelse"]
-}
-
-moved {
-  from = module.status
-  to   = module.cloud_run_apps["status"]
-}
-
-# Adopts the resources that were declared inline before the module existed.
-# Safe to delete once every environment has applied them.
-moved {
-  from = google_artifact_registry_repository.web
-  to   = module.cloud_run_apps["helgefolelse"].google_artifact_registry_repository.this
-}
-
-moved {
-  from = google_service_account.runtime
-  to   = module.cloud_run_apps["helgefolelse"].google_service_account.runtime
-}
-
-moved {
-  from = google_cloud_run_v2_service.web
-  to   = module.cloud_run_apps["helgefolelse"].google_cloud_run_v2_service.this
-}
-
-moved {
-  from = google_service_account_iam_member.runtime_user
-  to   = module.cloud_run_apps["helgefolelse"].google_service_account_iam_member.deployer_acts_as_runtime
+  from = module.cloud_run_apps
+  to   = module.gke_apps
 }
